@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import 'input_screen.dart';
@@ -15,6 +17,9 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
   AppProvider? _provider;
+
+  static const _fileChannel =
+      MethodChannel('com.example.fengCalendar/file_open');
 
   final _screens = const [
     InputScreen(),
@@ -41,6 +46,10 @@ class _HomeScreenState extends State<HomeScreen> {
       _provider = context.read<AppProvider>();
       _provider!.loadLocal();
       _provider!.addListener(_onProviderChange);
+      if (Platform.isIOS) {
+        _fileChannel.setMethodCallHandler(_handleFileOpen);
+        _checkPendingFile();
+      }
     });
   }
 
@@ -54,6 +63,31 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_provider?.status == ExtractionStatus.success && _currentIndex != 1) {
       setState(() => _currentIndex = 1);
     }
+    // Switch to input tab when a file is waiting to be imported
+    if (_provider?.pendingFilePath != null && _currentIndex != 0) {
+      setState(() => _currentIndex = 0);
+    }
+  }
+
+  Future<dynamic> _handleFileOpen(MethodCall call) async {
+    if (call.method == 'openFile') {
+      final path = call.arguments as String?;
+      if (path != null) {
+        _provider?.setPendingFile(path);
+        if (mounted) setState(() => _currentIndex = 0);
+      }
+    }
+  }
+
+  Future<void> _checkPendingFile() async {
+    try {
+      final path =
+          await _fileChannel.invokeMethod<String>('getPendingFile');
+      if (path != null) {
+        _provider?.setPendingFile(path);
+        if (mounted) setState(() => _currentIndex = 0);
+      }
+    } catch (_) {}
   }
 
   @override

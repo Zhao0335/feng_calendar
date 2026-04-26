@@ -5,9 +5,17 @@ class TodoCard extends StatelessWidget {
   final Todo todo;
   final ValueChanged<bool>? onToggle;
   final VoidCallback? onDelete;
+  final VoidCallback? onTap;
+  final VoidCallback? onPin;
 
-  const TodoCard(
-      {super.key, required this.todo, this.onToggle, this.onDelete});
+  const TodoCard({
+    super.key,
+    required this.todo,
+    this.onToggle,
+    this.onDelete,
+    this.onTap,
+    this.onPin,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -22,15 +30,23 @@ class TodoCard extends StatelessWidget {
     return Opacity(
       opacity: isDone ? 0.45 : 1.0,
       child: GestureDetector(
-        onLongPress: onDelete != null ? () => _confirmDelete(context) : null,
+        onTap: onTap,
+        onLongPress: (onDelete != null || onPin != null)
+            ? () => _showActionSheet(context)
+            : null,
         child: Container(
           margin: const EdgeInsets.only(bottom: 10),
           decoration: BoxDecoration(
             color: cs.surface,
             borderRadius: BorderRadius.circular(16),
+            border: todo.isPinned
+                ? Border.all(color: const Color(0xFFEF4444), width: 1.8)
+                : null,
             boxShadow: [
               BoxShadow(
-                color: cs.shadow.withValues(alpha: 0.06),
+                color: todo.isPinned
+                    ? const Color(0xFFEF4444).withValues(alpha: 0.15)
+                    : cs.shadow.withValues(alpha: 0.06),
                 blurRadius: 12,
                 offset: const Offset(0, 2),
               ),
@@ -66,19 +82,32 @@ class TodoCard extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Text(
-                                todo.title,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleSmall
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      decoration: isDone
-                                          ? TextDecoration.lineThrough
-                                          : null,
-                                      decorationThickness: 2,
-                                      height: 1.3,
+                              Row(
+                                children: [
+                                  if (todo.isPinned) ...[
+                                    Icon(Icons.push_pin_rounded,
+                                        size: 12,
+                                        color: priorityColor
+                                            .withValues(alpha: 0.7)),
+                                    const SizedBox(width: 4),
+                                  ],
+                                  Expanded(
+                                    child: Text(
+                                      todo.title,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleSmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                            decoration: isDone
+                                                ? TextDecoration.lineThrough
+                                                : null,
+                                            decorationThickness: 2,
+                                            height: 1.3,
+                                          ),
                                     ),
+                                  ),
+                                ],
                               ),
                               if (todo.notes != null) ...[
                                 const SizedBox(height: 2),
@@ -121,6 +150,54 @@ class TodoCard extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  void _showActionSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            if (onPin != null)
+              ListTile(
+                leading: Icon(todo.isPinned
+                    ? Icons.push_pin_outlined
+                    : Icons.push_pin_rounded),
+                title: Text(todo.isPinned ? '取消置顶' : '置顶'),
+                onTap: () {
+                  Navigator.pop(context);
+                  onPin!();
+                },
+              ),
+            if (onTap != null)
+              ListTile(
+                leading: const Icon(Icons.edit_rounded),
+                title: const Text('编辑'),
+                onTap: () {
+                  Navigator.pop(context);
+                  onTap!();
+                },
+              ),
+            if (onDelete != null)
+              ListTile(
+                leading: const Icon(Icons.delete_rounded,
+                    color: Color(0xFFEF4444)),
+                title: const Text('删除',
+                    style: TextStyle(color: Color(0xFFEF4444))),
+                onTap: () {
+                  Navigator.pop(context);
+                  _confirmDelete(context);
+                },
+              ),
+            const SizedBox(height: 8),
+          ],
         ),
       ),
     );

@@ -8,7 +8,7 @@ class StorageService {
   static Future<void> init() async {
     _db = await openDatabase(
       join(await getDatabasesPath(), 'schedule.db'),
-      version: 1,
+      version: 3,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE events (
@@ -18,6 +18,7 @@ class StorageService {
             time TEXT,
             location TEXT,
             notes TEXT,
+            is_pinned INTEGER DEFAULT 0,
             created_at TEXT NOT NULL
           )
         ''');
@@ -29,9 +30,22 @@ class StorageService {
             priority TEXT DEFAULT 'medium',
             notes TEXT,
             is_done INTEGER DEFAULT 0,
+            is_pinned INTEGER DEFAULT 0,
             created_at TEXT NOT NULL
           )
         ''');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 3) {
+          // Safe add: catches error if column already exists from a partial
+          // earlier migration attempt.
+          for (final table in ['events', 'todos']) {
+            try {
+              await db.execute(
+                  'ALTER TABLE $table ADD COLUMN is_pinned INTEGER DEFAULT 0');
+            } catch (_) {}
+          }
+        }
       },
     );
   }
@@ -42,7 +56,8 @@ class StorageService {
   }
 
   Future<List<ScheduleEvent>> getEvents() async {
-    final rows = await db.query('events', orderBy: 'date ASC, time ASC');
+    final rows = await db.query('events',
+        orderBy: 'is_pinned DESC, date ASC, time ASC');
     return rows.map(ScheduleEvent.fromDbMap).toList();
   }
 
@@ -58,6 +73,24 @@ class StorageService {
     await batch.commit(noResult: true);
   }
 
+  Future<void> updateEvent(ScheduleEvent event) async {
+    await db.update(
+      'events',
+      event.toDbMap(),
+      where: 'id = ?',
+      whereArgs: [event.id],
+    );
+  }
+
+  Future<void> updateEventPinned(int id, bool isPinned) async {
+    await db.update(
+      'events',
+      {'is_pinned': isPinned ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   Future<void> deleteEvent(int id) async {
     await db.delete('events', where: 'id = ?', whereArgs: [id]);
   }
@@ -67,7 +100,8 @@ class StorageService {
   }
 
   Future<List<Todo>> getTodos() async {
-    final rows = await db.query('todos', orderBy: 'is_done ASC, deadline ASC');
+    final rows = await db.query('todos',
+        orderBy: 'is_pinned DESC, is_done ASC, deadline ASC');
     return rows.map(Todo.fromDbMap).toList();
   }
 
@@ -83,10 +117,28 @@ class StorageService {
     await batch.commit(noResult: true);
   }
 
+  Future<void> updateTodo(Todo todo) async {
+    await db.update(
+      'todos',
+      todo.toDbMap(),
+      where: 'id = ?',
+      whereArgs: [todo.id],
+    );
+  }
+
   Future<void> updateTodoDone(int id, bool isDone) async {
     await db.update(
       'todos',
       {'is_done': isDone ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<void> updateTodoPinned(int id, bool isPinned) async {
+    await db.update(
+      'todos',
+      {'is_pinned': isPinned ? 1 : 0},
       where: 'id = ?',
       whereArgs: [id],
     );

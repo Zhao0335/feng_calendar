@@ -15,6 +15,9 @@ class AppProvider extends ChangeNotifier {
   ExtractionStatus status = ExtractionStatus.idle;
   String? errorMessage;
 
+  // File path to import from iOS share / open-in
+  String? pendingFilePath;
+
   AppProvider({required this.api, required this.storage});
 
   Future<void> loadLocal() async {
@@ -53,6 +56,73 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> updateEvent(ScheduleEvent event) async {
+    await storage.updateEvent(event);
+    final idx = events.indexWhere((e) => e.id == event.id);
+    if (idx != -1) {
+      final updated = List<ScheduleEvent>.from(events);
+      updated[idx] = event;
+      // Re-sort: pinned first, then by date/time
+      updated.sort((a, b) {
+        if (a.isPinned != b.isPinned) return a.isPinned ? -1 : 1;
+        final dateCompare = (a.date ?? '').compareTo(b.date ?? '');
+        if (dateCompare != 0) return dateCompare;
+        return (a.time ?? '').compareTo(b.time ?? '');
+      });
+      events = updated;
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateTodo(Todo todo) async {
+    await storage.updateTodo(todo);
+    final idx = todos.indexWhere((t) => t.id == todo.id);
+    if (idx != -1) {
+      final updated = List<Todo>.from(todos);
+      updated[idx] = todo;
+      updated.sort((a, b) {
+        if (a.isPinned != b.isPinned) return a.isPinned ? -1 : 1;
+        if (a.isDone != b.isDone) return a.isDone ? 1 : -1;
+        return (a.deadline ?? '').compareTo(b.deadline ?? '');
+      });
+      todos = updated;
+      notifyListeners();
+    }
+  }
+
+  Future<void> toggleEventPin(int id, bool isPinned) async {
+    await storage.updateEventPinned(id, isPinned);
+    final idx = events.indexWhere((e) => e.id == id);
+    if (idx != -1) {
+      final updated = List<ScheduleEvent>.from(events);
+      updated[idx] = events[idx].copyWith(isPinned: isPinned);
+      updated.sort((a, b) {
+        if (a.isPinned != b.isPinned) return a.isPinned ? -1 : 1;
+        final dateCompare = (a.date ?? '').compareTo(b.date ?? '');
+        if (dateCompare != 0) return dateCompare;
+        return (a.time ?? '').compareTo(b.time ?? '');
+      });
+      events = updated;
+      notifyListeners();
+    }
+  }
+
+  Future<void> toggleTodoPin(int id, bool isPinned) async {
+    await storage.updateTodoPinned(id, isPinned);
+    final idx = todos.indexWhere((t) => t.id == id);
+    if (idx != -1) {
+      final updated = List<Todo>.from(todos);
+      updated[idx] = todos[idx].copyWith(isPinned: isPinned);
+      updated.sort((a, b) {
+        if (a.isPinned != b.isPinned) return a.isPinned ? -1 : 1;
+        if (a.isDone != b.isDone) return a.isDone ? 1 : -1;
+        return (a.deadline ?? '').compareTo(b.deadline ?? '');
+      });
+      todos = updated;
+      notifyListeners();
+    }
+  }
+
   Future<void> deleteEvent(int id) async {
     await storage.deleteEvent(id);
     events = events.where((e) => e.id != id).toList();
@@ -81,5 +151,14 @@ class AppProvider extends ChangeNotifier {
     events = [];
     todos = [];
     notifyListeners();
+  }
+
+  void setPendingFile(String path) {
+    pendingFilePath = path;
+    notifyListeners();
+  }
+
+  void clearPendingFile() {
+    pendingFilePath = null;
   }
 }

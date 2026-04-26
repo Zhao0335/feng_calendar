@@ -28,6 +28,32 @@ class _InputScreenState extends State<InputScreen>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Consume pending file set by iOS "Open In" / Share sheet
+    final pending = context.read<AppProvider>().pendingFilePath;
+    if (pending != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _applyPendingFile(pending);
+          context.read<AppProvider>().clearPendingFile();
+        }
+      });
+    }
+  }
+
+  void _applyPendingFile(String path) {
+    final name = path.split('/').last;
+    final ext = name.split('.').last.toLowerCase();
+    setState(() {
+      _selectedFile = File(path);
+      _selectedFileType = ext == 'md' ? 'txt' : ext;
+      _selectedFileName = name;
+    });
+    _tabController.animateTo(2);
+  }
+
+  @override
   void dispose() {
     _tabController.dispose();
     _textController.dispose();
@@ -83,13 +109,32 @@ class _InputScreenState extends State<InputScreen>
     }
 
     if (!mounted) return;
+    final cs = Theme.of(context).colorScheme;
     if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(provider.errorMessage ?? '提取失败，请检查服务器连接'),
-        backgroundColor: Theme.of(context).colorScheme.error,
+        backgroundColor: cs.error,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         margin: const EdgeInsets.all(12),
+      ));
+    } else {
+      final ec = provider.events.length;
+      final tc = provider.todos.length;
+      final msg = (ec == 0 && tc == 0)
+          ? '未提取到任何内容，请检查输入或服务器返回格式'
+          : '提取完成：${[
+              if (ec > 0) '$ec 个日程',
+              if (tc > 0) '$tc 个待办',
+            ].join('、')}';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(msg),
+        backgroundColor:
+            (ec == 0 && tc == 0) ? cs.error : const Color(0xFF22C55E),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(12),
+        duration: const Duration(seconds: 3),
       ));
     }
   }

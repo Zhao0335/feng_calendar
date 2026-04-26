@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/app_provider.dart';
 import '../services/api_service.dart';
+import '../services/auth_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -60,7 +61,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  Future<void> _logout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('退出登录'),
+        content: const Text('确认退出当前账户？本地数据不会删除。'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('退出')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final prefs = await SharedPreferences.getInstance();
+    final baseUrl = prefs.getString('server_base_url') ?? 'http://101.37.80.57:5522';
+    if (!mounted) return;
+    await context.read<AuthService>().logout(baseUrl);
+  }
+
   Future<void> _clearData() async {
+    if (!mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -101,6 +126,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
+          const _GroupLabel('账户'),
+          _GroupCard(
+            children: [
+              ListTile(
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+                leading: Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: cs.primaryContainer,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.person_rounded,
+                      size: 18, color: cs.primary),
+                ),
+                title: Text(
+                  context.watch<AuthService>().username ?? '未知用户',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text('已登录',
+                    style: TextStyle(fontSize: 12, color: cs.outline)),
+                trailing: TextButton(
+                  onPressed: _logout,
+                  child: Text('退出',
+                      style: TextStyle(color: cs.error, fontSize: 13)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
           const _GroupLabel('服务器连接'),
           _GroupCard(
             children: [

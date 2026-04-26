@@ -4,8 +4,16 @@ import '../models/models.dart';
 class EventCard extends StatelessWidget {
   final ScheduleEvent event;
   final VoidCallback? onDelete;
+  final VoidCallback? onTap;
+  final VoidCallback? onPin;
 
-  const EventCard({super.key, required this.event, this.onDelete});
+  const EventCard({
+    super.key,
+    required this.event,
+    this.onDelete,
+    this.onTap,
+    this.onPin,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -16,15 +24,23 @@ class EventCard extends StatelessWidget {
     final badgeFg = cs.onPrimaryContainer;
 
     return GestureDetector(
-      onLongPress: onDelete != null ? () => _confirmDelete(context) : null,
+      onTap: onTap,
+      onLongPress: (onDelete != null || onPin != null)
+          ? () => _showActionSheet(context)
+          : null,
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         decoration: BoxDecoration(
           color: cs.surface,
           borderRadius: BorderRadius.circular(16),
+          border: event.isPinned
+              ? Border.all(color: const Color(0xFFEF4444), width: 1.8)
+              : null,
           boxShadow: [
             BoxShadow(
-              color: cs.shadow.withValues(alpha: 0.06),
+              color: event.isPinned
+                  ? const Color(0xFFEF4444).withValues(alpha: 0.15)
+                  : cs.shadow.withValues(alpha: 0.06),
               blurRadius: 12,
               offset: const Offset(0, 2),
             ),
@@ -46,15 +62,28 @@ class EventCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
-                            child: Text(
-                              event.title,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleSmall
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    height: 1.3,
+                            child: Row(
+                              children: [
+                                if (event.isPinned) ...[
+                                  Icon(Icons.push_pin_rounded,
+                                      size: 13,
+                                      color: cs.primary
+                                          .withValues(alpha: 0.7)),
+                                  const SizedBox(width: 4),
+                                ],
+                                Expanded(
+                                  child: Text(
+                                    event.title,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleSmall
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                          height: 1.3,
+                                        ),
                                   ),
+                                ),
+                              ],
                             ),
                           ),
                           if (event.date != null || event.time != null) ...[
@@ -126,6 +155,54 @@ class EventCard extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  void _showActionSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            if (onPin != null)
+              ListTile(
+                leading: Icon(event.isPinned
+                    ? Icons.push_pin_outlined
+                    : Icons.push_pin_rounded),
+                title: Text(event.isPinned ? '取消置顶' : '置顶'),
+                onTap: () {
+                  Navigator.pop(context);
+                  onPin!();
+                },
+              ),
+            if (onTap != null)
+              ListTile(
+                leading: const Icon(Icons.edit_rounded),
+                title: const Text('编辑'),
+                onTap: () {
+                  Navigator.pop(context);
+                  onTap!();
+                },
+              ),
+            if (onDelete != null)
+              ListTile(
+                leading: const Icon(Icons.delete_rounded,
+                    color: Color(0xFFEF4444)),
+                title: const Text('删除',
+                    style: TextStyle(color: Color(0xFFEF4444))),
+                onTap: () {
+                  Navigator.pop(context);
+                  _confirmDelete(context);
+                },
+              ),
+            const SizedBox(height: 8),
+          ],
         ),
       ),
     );

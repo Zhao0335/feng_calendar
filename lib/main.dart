@@ -2,17 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/app_provider.dart';
 import 'services/api_service.dart';
+import 'services/auth_service.dart';
 import 'services/storage_service.dart';
 import 'screens/home_screen.dart';
+import 'screens/auth_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await StorageService.init();
 
+  final authService = AuthService();
+  await authService.restoreSession();
+
   runApp(
     MultiProvider(
       providers: [
-        Provider<ApiService>(create: (_) => ApiService()),
+        ChangeNotifierProvider<AuthService>.value(value: authService),
+        ProxyProvider<AuthService, ApiService>(
+          create: (ctx) => ApiService(auth: ctx.read<AuthService>()),
+          update: (_, auth, prev) => prev ?? ApiService(auth: auth),
+        ),
         Provider<StorageService>(create: (_) => StorageService()),
         ChangeNotifierProxyProvider2<ApiService, StorageService, AppProvider>(
           create: (ctx) => AppProvider(
@@ -39,7 +48,7 @@ class ScheduleApp extends StatelessWidget {
       theme: _buildTheme(Brightness.light),
       darkTheme: _buildTheme(Brightness.dark),
       themeMode: ThemeMode.system,
-      home: const HomeScreen(),
+      home: const _AuthGate(),
     );
   }
 
@@ -114,5 +123,15 @@ class ScheduleApp extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _AuthGate extends StatelessWidget {
+  const _AuthGate();
+
+  @override
+  Widget build(BuildContext context) {
+    final isLoggedIn = context.watch<AuthService>().isLoggedIn;
+    return isLoggedIn ? const HomeScreen() : const AuthScreen();
   }
 }

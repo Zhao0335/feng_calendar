@@ -5,6 +5,7 @@ class ScheduleEvent {
   final String? time;
   final String? location;
   final String? notes;
+  final bool isPinned;
   final DateTime createdAt;
 
   const ScheduleEvent({
@@ -14,6 +15,7 @@ class ScheduleEvent {
     this.time,
     this.location,
     this.notes,
+    this.isPinned = false,
     required this.createdAt,
   });
 
@@ -25,6 +27,7 @@ class ScheduleEvent {
       time: json['time'] as String?,
       location: json['location'] as String?,
       notes: json['notes'] as String?,
+      isPinned: (json['is_pinned'] as int?) == 1,
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'] as String)
           : DateTime.now(),
@@ -38,6 +41,7 @@ class ScheduleEvent {
         'time': time,
         'location': location,
         'notes': notes,
+        'is_pinned': isPinned ? 1 : 0,
         'created_at': createdAt.toIso8601String(),
       };
 
@@ -48,6 +52,7 @@ class ScheduleEvent {
         'time': time,
         'location': location,
         'notes': notes,
+        'is_pinned': isPinned ? 1 : 0,
         'created_at': createdAt.toIso8601String(),
       };
 
@@ -59,6 +64,7 @@ class ScheduleEvent {
       time: map['time'] as String?,
       location: map['location'] as String?,
       notes: map['notes'] as String?,
+      isPinned: (map['is_pinned'] as int? ?? 0) == 1,
       createdAt: DateTime.parse(map['created_at'] as String),
     );
   }
@@ -66,18 +72,20 @@ class ScheduleEvent {
   ScheduleEvent copyWith({
     int? id,
     String? title,
-    String? date,
-    String? time,
-    String? location,
-    String? notes,
+    Object? date = _sentinel,
+    Object? time = _sentinel,
+    Object? location = _sentinel,
+    Object? notes = _sentinel,
+    bool? isPinned,
   }) {
     return ScheduleEvent(
       id: id ?? this.id,
       title: title ?? this.title,
-      date: date ?? this.date,
-      time: time ?? this.time,
-      location: location ?? this.location,
-      notes: notes ?? this.notes,
+      date: date == _sentinel ? this.date : date as String?,
+      time: time == _sentinel ? this.time : time as String?,
+      location: location == _sentinel ? this.location : location as String?,
+      notes: notes == _sentinel ? this.notes : notes as String?,
+      isPinned: isPinned ?? this.isPinned,
       createdAt: createdAt,
     );
   }
@@ -92,6 +100,7 @@ class Todo {
   final TodoPriority priority;
   final String? notes;
   final bool isDone;
+  final bool isPinned;
   final DateTime createdAt;
 
   const Todo({
@@ -101,6 +110,7 @@ class Todo {
     this.priority = TodoPriority.medium,
     this.notes,
     this.isDone = false,
+    this.isPinned = false,
     required this.createdAt,
   });
 
@@ -112,6 +122,7 @@ class Todo {
       priority: _parsePriority(json['priority'] as String?),
       notes: json['notes'] as String?,
       isDone: (json['is_done'] as int?) == 1,
+      isPinned: (json['is_pinned'] as int?) == 1,
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'] as String)
           : DateTime.now(),
@@ -136,6 +147,7 @@ class Todo {
         'priority': priority.name,
         'notes': notes,
         'is_done': isDone ? 1 : 0,
+        'is_pinned': isPinned ? 1 : 0,
         'created_at': createdAt.toIso8601String(),
       };
 
@@ -147,6 +159,7 @@ class Todo {
       priority: _parsePriority(map['priority'] as String?),
       notes: map['notes'] as String?,
       isDone: (map['is_done'] as int) == 1,
+      isPinned: (map['is_pinned'] as int? ?? 0) == 1,
       createdAt: DateTime.parse(map['created_at'] as String),
     );
   }
@@ -158,28 +171,34 @@ class Todo {
         'priority': priority.name,
         'notes': notes,
         'is_done': isDone,
+        'is_pinned': isPinned ? 1 : 0,
         'created_at': createdAt.toIso8601String(),
       };
 
   Todo copyWith({
     int? id,
     String? title,
-    String? deadline,
+    Object? deadline = _sentinel,
     TodoPriority? priority,
-    String? notes,
+    Object? notes = _sentinel,
     bool? isDone,
+    bool? isPinned,
   }) {
     return Todo(
       id: id ?? this.id,
       title: title ?? this.title,
-      deadline: deadline ?? this.deadline,
+      deadline: deadline == _sentinel ? this.deadline : deadline as String?,
       priority: priority ?? this.priority,
-      notes: notes ?? this.notes,
+      notes: notes == _sentinel ? this.notes : notes as String?,
       isDone: isDone ?? this.isDone,
+      isPinned: isPinned ?? this.isPinned,
       createdAt: createdAt,
     );
   }
 }
+
+// Sentinel for nullable copyWith fields
+const Object _sentinel = Object();
 
 class ExtractionResult {
   final List<ScheduleEvent> events;

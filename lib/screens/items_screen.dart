@@ -5,6 +5,7 @@ import '../providers/app_provider.dart';
 import '../widgets/event_card.dart';
 import '../widgets/todo_card.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/edit_sheet.dart';
 
 enum _Filter { all, events, todos }
 
@@ -21,14 +22,49 @@ class _ItemsScreenState extends State<ItemsScreen> {
   Widget _swipeable({
     required Key key,
     required VoidCallback? onDelete,
+    required VoidCallback? onPin,
+    required bool isPinned,
     required Widget child,
   }) {
-    if (onDelete == null) return child;
+    final hasDelete = onDelete != null;
+    final hasPin = onPin != null;
+    if (!hasDelete && !hasPin) return child;
+
+    final direction = (hasDelete && hasPin)
+        ? DismissDirection.horizontal
+        : hasDelete
+            ? DismissDirection.endToStart
+            : DismissDirection.startToEnd;
+
     return Dismissible(
       key: key,
-      direction: DismissDirection.endToStart,
-      onDismissed: (_) => onDelete(),
+      direction: direction,
+      confirmDismiss: (dir) async {
+        if (dir == DismissDirection.startToEnd) {
+          onPin?.call();
+          return false; // snap back — pin action doesn't remove the item
+        }
+        // endToStart → delete
+        onDelete?.call();
+        return false; // we handle removal via provider, not Dismissible
+      },
+      // Right-swipe background (pin)
       background: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        decoration: BoxDecoration(
+          color: isPinned ? const Color(0xFF6366F1) : const Color(0xFFF59E0B),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.only(left: 22),
+        child: Icon(
+          isPinned ? Icons.push_pin_outlined : Icons.push_pin_rounded,
+          color: Colors.white,
+          size: 22,
+        ),
+      ),
+      // Left-swipe background (delete)
+      secondaryBackground: Container(
         margin: const EdgeInsets.only(bottom: 10),
         decoration: BoxDecoration(
           color: const Color(0xFFEF4444),
@@ -40,6 +76,20 @@ class _ItemsScreenState extends State<ItemsScreen> {
       ),
       child: child,
     );
+  }
+
+  Future<void> _editEvent(ScheduleEvent event) async {
+    final updated = await showEditEventSheet(context, event);
+    if (updated != null && mounted) {
+      await context.read<AppProvider>().updateEvent(updated);
+    }
+  }
+
+  Future<void> _editTodo(Todo todo) async {
+    final updated = await showEditTodoSheet(context, todo);
+    if (updated != null && mounted) {
+      await context.read<AppProvider>().updateTodo(updated);
+    }
   }
 
   @override
@@ -107,6 +157,12 @@ class _ItemsScreenState extends State<ItemsScreen> {
                             color: cs.primary),
                       ...events.map((e) => _swipeable(
                             key: ValueKey('event_${e.id}'),
+                            isPinned: e.isPinned,
+                            onPin: e.id != null
+                                ? () => context
+                                    .read<AppProvider>()
+                                    .toggleEventPin(e.id!, !e.isPinned)
+                                : null,
                             onDelete: e.id != null
                                 ? () => context
                                     .read<AppProvider>()
@@ -114,6 +170,12 @@ class _ItemsScreenState extends State<ItemsScreen> {
                                 : null,
                             child: EventCard(
                               event: e,
+                              onTap: () => _editEvent(e),
+                              onPin: e.id != null
+                                  ? () => context
+                                      .read<AppProvider>()
+                                      .toggleEventPin(e.id!, !e.isPinned)
+                                  : null,
                               onDelete: e.id != null
                                   ? () => context
                                       .read<AppProvider>()
@@ -132,6 +194,12 @@ class _ItemsScreenState extends State<ItemsScreen> {
                             color: Color(0xFFF97316)),
                       ...todos.map((t) => _swipeable(
                             key: ValueKey('todo_${t.id}'),
+                            isPinned: t.isPinned,
+                            onPin: t.id != null
+                                ? () => context
+                                    .read<AppProvider>()
+                                    .toggleTodoPin(t.id!, !t.isPinned)
+                                : null,
                             onDelete: t.id != null
                                 ? () => context
                                     .read<AppProvider>()
@@ -139,10 +207,16 @@ class _ItemsScreenState extends State<ItemsScreen> {
                                 : null,
                             child: TodoCard(
                               todo: t,
+                              onTap: () => _editTodo(t),
                               onToggle: t.id != null
                                   ? (done) => context
                                       .read<AppProvider>()
                                       .toggleTodo(t.id!, done)
+                                  : null,
+                              onPin: t.id != null
+                                  ? () => context
+                                      .read<AppProvider>()
+                                      .toggleTodoPin(t.id!, !t.isPinned)
                                   : null,
                               onDelete: t.id != null
                                   ? () => context
