@@ -86,26 +86,6 @@ jobs:
           cache: true
 
       - run: flutter pub get
-
-      # Xcode 26 在构建环境里同时设置所有平台的 deployment target，
-      # clang 26 遇到多个 *_DEPLOYMENT_TARGET 变量时报错。
-      # 在 macos_assemble.sh 里提前 unset 掉非 macOS 的变量。
-      - name: Patch Flutter for Xcode 26 compatibility
-        run: |
-          ASSEMBLE="$(flutter --version --machine 2>/dev/null \
-            | python3 -c 'import json,sys; print(json.load(sys.stdin)["flutterRoot"])')\
-/packages/flutter_tools/bin/macos_assemble.sh"
-          if ! grep -q "XROS_DEPLOYMENT_TARGET" "$ASSEMBLE"; then
-            sed -i '' '/# Main entry point\./i\
-# Strip non-macOS deployment targets (Xcode 26 fix)\
-unset IPHONEOS_DEPLOYMENT_TARGET\
-unset XROS_DEPLOYMENT_TARGET\
-unset TVOS_DEPLOYMENT_TARGET\
-unset WATCHOS_DEPLOYMENT_TARGET\
-unset DRIVERKIT_DEPLOYMENT_TARGET\
-' "$ASSEMBLE"
-          fi
-
       - run: flutter build macos --release --no-codesign
 
       - name: Create DMG
