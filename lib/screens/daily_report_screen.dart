@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../providers/app_provider.dart';
@@ -10,7 +11,7 @@ class DailyReportScreen extends StatefulWidget {
   State<DailyReportScreen> createState() => _DailyReportScreenState();
 }
 
-class _DailyReportScreenState extends State<DailyReportScreen>
+class _DailyReportScreenState extends State<DailyReportScreen> 
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
 
@@ -195,12 +196,26 @@ class _DailyReportScreenState extends State<DailyReportScreen>
           ),
         ],
       ),
-      child: SelectableText(
-        content,
-        style: TextStyle(
-          fontSize: 14,
-          height: 1.7,
-          color: cs.onSurface,
+      child: MarkdownBody(
+        data: content,
+        selectable: true,
+        styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+          p: TextStyle(fontSize: 14, height: 1.7, color: cs.onSurface),
+          strong: TextStyle(fontWeight: FontWeight.w700, color: cs.onSurface),
+          h1: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: cs.onSurface),
+          h2: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: cs.onSurface),
+          h3: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: cs.onSurface),
+          code: TextStyle(fontSize: 13, fontFamily: 'monospace',
+              backgroundColor: cs.surfaceContainerHighest, color: cs.primary),
+          codeblockDecoration: BoxDecoration(
+            color: cs.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          blockquoteDecoration: BoxDecoration(
+            border: Border(left: BorderSide(color: cs.primary, width: 3)),
+            color: cs.primaryContainer.withValues(alpha: 0.15),
+          ),
+          listBullet: TextStyle(fontSize: 14, color: cs.onSurface),
         ),
       ),
     );
@@ -209,7 +224,7 @@ class _DailyReportScreenState extends State<DailyReportScreen>
   Widget _buildHistoryTab(ColorScheme cs) {
     return Consumer<AppProvider>(
       builder: (_, provider, __) {
-        if (provider.reportLoading && provider.reportHistory.isEmpty) {
+        if (provider.historyReportLoading && provider.reportHistory.isEmpty) {
           return const Center(child: CircularProgressIndicator());
         }
 
@@ -332,10 +347,17 @@ class _DailyReportScreenState extends State<DailyReportScreen>
                 child: SingleChildScrollView(
                   controller: controller,
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                  child: SelectableText(
-                    report.summary ?? '',
-                    style: TextStyle(
-                        fontSize: 14, height: 1.7, color: cs.onSurface),
+                  child: MarkdownBody(
+                    data: report.summary ?? '',
+                    selectable: true,
+                    styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+                      p: TextStyle(fontSize: 14, height: 1.7, color: cs.onSurface),
+                      strong: TextStyle(fontWeight: FontWeight.w700, color: cs.onSurface),
+                      h1: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: cs.onSurface),
+                      h2: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: cs.onSurface),
+                      h3: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: cs.onSurface),
+                      listBullet: TextStyle(fontSize: 14, color: cs.onSurface),
+                    ),
                   ),
                 ),
               ),

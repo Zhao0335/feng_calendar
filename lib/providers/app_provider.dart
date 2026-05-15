@@ -81,10 +81,17 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<void> deleteEvent(int id) async {
-    await api.deleteEventApi(id);
-    await storage.deleteEvent(id);
-    events = events.where((e) => e.id != id).toList();
-    notifyListeners();
+    try {
+      await api.deleteEventApi(id); // returns false on 404 (already deleted) — still clean up locally
+      await storage.deleteEvent(id);
+      events = events.where((e) => e.id != id).toList();
+      notifyListeners();
+    } catch (_) {
+      // Network error: remove locally anyway so UI stays consistent
+      await storage.deleteEvent(id);
+      events = events.where((e) => e.id != id).toList();
+      notifyListeners();
+    }
   }
 
   Future<void> toggleEventPin(int id, bool isPinned) async {
@@ -103,10 +110,16 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<void> deleteTodo(int id) async {
-    await api.deleteTodoApi(id);
-    await storage.deleteTodo(id);
-    todos = todos.where((t) => t.id != id).toList();
-    notifyListeners();
+    try {
+      await api.deleteTodoApi(id); // returns false on 404 — still clean up locally
+      await storage.deleteTodo(id);
+      todos = todos.where((t) => t.id != id).toList();
+      notifyListeners();
+    } catch (_) {
+      await storage.deleteTodo(id);
+      todos = todos.where((t) => t.id != id).toList();
+      notifyListeners();
+    }
   }
 
   Future<void> toggleTodo(int id, bool isDone) async {
@@ -316,12 +329,11 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
     try {
       _interests = await api.getInterests();
+    } catch (_) {
+      _interests = [];
+    } finally {
       _profileLoading = false;
       notifyListeners();
-    } catch (e) {
-      _profileLoading = false;
-      notifyListeners();
-      rethrow;
     }
   }
 
@@ -346,7 +358,11 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<void> loadProfileSummary() async {
-    _profileSummary = await api.getProfileSummary();
+    try {
+      _profileSummary = await api.getProfileSummary();
+    } catch (_) {
+      _profileSummary = null;
+    }
     notifyListeners();
   }
 
@@ -360,6 +376,11 @@ class AppProvider extends ChangeNotifier {
   int get recommendationTotal => _recommendationTotal;
   bool get recommendationsLoading => _recommendationsLoading;
 
+  Future<void> refreshRecommendations() async {
+    await api.refreshRecommendations();
+    await loadRecommendations();
+  }
+
   Future<void> loadRecommendations({bool unreadOnly = false}) async {
     _recommendationsLoading = true;
     notifyListeners();
@@ -370,12 +391,12 @@ class AppProvider extends ChangeNotifier {
           .map((e) => RecommendationItem.fromJson(e as Map<String, dynamic>))
           .toList();
       _recommendationTotal = result['total'] as int? ?? 0;
+    } catch (_) {
+      _recommendations = [];
+      _recommendationTotal = 0;
+    } finally {
       _recommendationsLoading = false;
       notifyListeners();
-    } catch (e) {
-      _recommendationsLoading = false;
-      notifyListeners();
-      rethrow;
     }
   }
 
@@ -434,51 +455,52 @@ class AppProvider extends ChangeNotifier {
   ArxivReport? _todayReport;
   List<ArxivReport> _reportHistory = [];
   ArxivPreference _arxivPreference = const ArxivPreference();
-  bool _reportLoading = false;
+  bool _todayReportLoading = false;
+  bool _historyReportLoading = false;
 
   ArxivReport? get todayReport => _todayReport;
   List<ArxivReport> get reportHistory => _reportHistory;
   ArxivPreference get arxivPreference => _arxivPreference;
-  bool get reportLoading => _reportLoading;
+  bool get reportLoading => _todayReportLoading;
+  bool get historyReportLoading => _historyReportLoading;
 
   Future<void> loadTodayReport() async {
-    _reportLoading = true;
+    _todayReportLoading = true;
     notifyListeners();
     try {
       _todayReport = await api.getTodayReport();
-      _reportLoading = false;
+      _todayReportLoading = false;
       notifyListeners();
     } catch (e) {
       _todayReport = null;
-      _reportLoading = false;
+      _todayReportLoading = false;
       notifyListeners();
     }
   }
 
   Future<void> loadReportHistory() async {
-    _reportLoading = true;
+    _historyReportLoading = true;
     notifyListeners();
     try {
       _reportHistory = await api.getReports();
-      _reportLoading = false;
+    } catch (_) {
+      _reportHistory = [];
+    } finally {
+      _historyReportLoading = false;
       notifyListeners();
-    } catch (e) {
-      _reportLoading = false;
-      notifyListeners();
-      rethrow;
     }
   }
 
   Future<void> generateReport({String? reportDate}) async {
-    _reportLoading = true;
+    _todayReportLoading = true;
     notifyListeners();
     try {
       final report = await api.generateReport(reportDate: reportDate);
       _todayReport = report;
-      _reportLoading = false;
+      _todayReportLoading = false;
       notifyListeners();
     } catch (e) {
-      _reportLoading = false;
+      _todayReportLoading = false;
       notifyListeners();
       rethrow;
     }

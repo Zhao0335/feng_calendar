@@ -15,6 +15,8 @@ dependencies:
 
   # 本地存储
   sqflite: ^2.3.2
+  sqflite_common_ffi: '>=2.3.0 <2.4.0'  # 2.3.x 用 sqlite3 2.x（DynamicLibrary，非 native assets）
+  sqlite3_flutter_libs: ^0.5.0           # 为 Windows 打包 sqlite3.dll，兼容 sqlite3 2.x
   path_provider: ^2.1.3
   shared_preferences: ^2.2.3
 
@@ -28,6 +30,7 @@ dependencies:
   # 工具
   intl: ^0.19.0
   path: ^1.9.0
+  flutter_markdown_plus: ^1.0.7
 
   # Widget 桥接（iOS/macOS 小组件）
   home_widget: ^0.5.0

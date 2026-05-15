@@ -1,3 +1,45 @@
+import 'dart:convert';
+
+bool _parseBool(dynamic v) {
+  if (v is bool) return v;
+  if (v is int) return v == 1;
+  return false;
+}
+
+List<String> _parseStringList(dynamic v, List<String> fallback) {
+  if (v is List) return v.map((e) => e.toString()).toList();
+  if (v is String) {
+    try {
+      final decoded = jsonDecode(v);
+      if (decoded is List) return decoded.map((e) => e.toString()).toList();
+    } catch (_) {}
+  }
+  return fallback;
+}
+
+/// Parses a field that may be a JSON-encoded string or a proper List of Maps.
+List<T> _parseObjectList<T>(
+    dynamic v, T Function(Map<String, dynamic>) fromJson) {
+  List<dynamic> list;
+  if (v is List) {
+    list = v;
+  } else if (v is String) {
+    try {
+      final decoded = jsonDecode(v);
+      if (decoded is List) {
+        list = decoded;
+      } else {
+        return [];
+      }
+    } catch (_) {
+      return [];
+    }
+  } else {
+    return [];
+  }
+  return list.whereType<Map<String, dynamic>>().map(fromJson).toList();
+}
+
 class ScheduleEvent {
   final int? id;
   final String title;
@@ -27,7 +69,7 @@ class ScheduleEvent {
       time: json['time'] as String?,
       location: json['location'] as String?,
       notes: json['notes'] as String?,
-      isPinned: (json['is_pinned'] as int?) == 1,
+      isPinned: _parseBool(json['is_pinned']),
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'] as String)
           : DateTime.now(),
@@ -121,8 +163,8 @@ class Todo {
       deadline: json['deadline'] as String?,
       priority: _parsePriority(json['priority'] as String?),
       notes: json['notes'] as String?,
-      isDone: (json['is_done'] as int?) == 1,
-      isPinned: (json['is_pinned'] as int?) == 1,
+      isDone: _parseBool(json['is_done']),
+      isPinned: _parseBool(json['is_pinned']),
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'] as String)
           : DateTime.now(),
@@ -301,12 +343,10 @@ class ChatDraft {
       id: json['id'] as int,
       title: json['title'] as String? ?? '',
       description: json['description'] as String?,
-      proposedEvents: (json['proposed_events'] as List<dynamic>? ?? [])
-          .map((e) => ProposedEvent.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      proposedTodos: (json['proposed_todos'] as List<dynamic>? ?? [])
-          .map((e) => ProposedTodo.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      proposedEvents: _parseObjectList(
+          json['proposed_events'], ProposedEvent.fromJson),
+      proposedTodos: _parseObjectList(
+          json['proposed_todos'], ProposedTodo.fromJson),
       status: json['status'] as String? ?? 'draft',
     );
   }
@@ -332,9 +372,7 @@ class Interest {
       id: json['id'] as int?,
       category: json['category'] as String? ?? '',
       tag: json['tag'] as String? ?? '',
-      keywords: (json['keywords'] as List<dynamic>? ?? [])
-          .map((e) => e.toString())
-          .toList(),
+      keywords: _parseStringList(json['keywords'], const []),
       weight: (json['weight'] as num?)?.toDouble() ?? 1.0,
     );
   }
@@ -385,9 +423,7 @@ class RecommendationItem {
       author: json['author'] as String?,
       publishedDate: json['published_date'] as String?,
       contentType: json['content_type'] as String?,
-      tags: (json['tags'] as List<dynamic>? ?? [])
-          .map((e) => e.toString())
-          .toList(),
+      tags: _parseStringList(json['tags'], const []),
     );
   }
 }
@@ -435,10 +471,9 @@ class ArxivPreference {
     return ArxivPreference(
       pushTime: json['push_time'] as String? ?? '09:00',
       paperCount: json['paper_count'] as int? ?? 5,
-      categories: (json['categories'] as List<dynamic>? ?? [])
-          .map((e) => e.toString())
-          .toList(),
-      isEnabled: json['is_enabled'] as bool? ?? true,
+      categories: _parseStringList(
+          json['categories'], const ['cs.AI', 'cs.LG']),
+      isEnabled: _parseBool(json['is_enabled']),
     );
   }
 }

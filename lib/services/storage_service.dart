@@ -1,11 +1,19 @@
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path/path.dart';
-import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../models/models.dart';
 
 class StorageService {
   static Database? _db;
 
   static Future<void> init() async {
+    // sqflite has native plugins for iOS/macOS/Android.
+    // Windows and Linux have no plugin, so we must use the FFI factory.
+    if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    }
     _db = await openDatabase(
       join(await getDatabasesPath(), 'schedule.db'),
       version: 3,

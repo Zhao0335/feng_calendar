@@ -268,7 +268,8 @@ class _AddInterestDialogState extends State<_AddInterestDialog> {
             TextFormField(
               decoration: InputDecoration(
                 labelText: '关键词',
-                hintText: '用逗号分隔，如：python, programming',
+                hintText: '如：大模型、agent、pytorch（逗号分隔）',
+                helperText: '中文关键词会自动翻译为英文',
                 filled: true,
                 fillColor: cs.surfaceContainerLow,
               ),

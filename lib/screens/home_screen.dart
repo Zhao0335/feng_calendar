@@ -22,6 +22,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
   AppProvider? _provider;
+  bool _extractionNavigated = false; // prevent repeated auto-switch after extraction
 
   static const _fileChannel =
       MethodChannel('com.example.fengCalendar/file_open');
@@ -74,7 +75,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _onProviderChange() {
-    if (_provider?.status == ExtractionStatus.success && _currentIndex != 1) {
+    final status = _provider?.status;
+    if (status == ExtractionStatus.loading) {
+      _extractionNavigated = false;
+    } else if (status == ExtractionStatus.success && !_extractionNavigated) {
+      _extractionNavigated = true;
       setState(() => _currentIndex = 1);
     }
     if (_provider?.pendingFilePath != null && _currentIndex != 0) {

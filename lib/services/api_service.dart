@@ -54,34 +54,50 @@ class ApiService {
 
   // ── Extraction ─────────────────────────────────────────────────────────────
 
-  Future<ExtractionResult> extractFromText(String text) async {
-    final base = await _getBaseUrl();
-    final res = await _dio.post('$base/extract',
-        data: jsonEncode({'text': text, 'current_date': _todayDate}),
-        options: _authOptions);
-    return _parseResult(res.data);
+  Future<ExtractionResult> extractFromText(String text) {
+    return _safe(() async {
+      final base = await _getBaseUrl();
+      final res = await _dio.post('$base/extract',
+          data: jsonEncode({'text': text, 'current_date': _todayDate}),
+          options: _authOptions);
+      return _parseResult(res.data);
+    });
   }
 
-  Future<ExtractionResult> extractFromImage(File imageFile) async {
-    final base = await _getBaseUrl();
-    final bytes = await imageFile.readAsBytes();
-    final b64 = base64Encode(bytes);
-    final ext = imageFile.path.split('.').last.toLowerCase();
-    final mime = ext == 'png' ? 'image/png' : 'image/jpeg';
-    final res = await _dio.post('$base/extract',
-        data: jsonEncode({'image_base64': b64, 'image_mime': mime, 'current_date': _todayDate}),
-        options: _authOptions);
-    return _parseResult(res.data);
+  Future<ExtractionResult> extractFromImage(File imageFile) {
+    return _safe(() async {
+      final base = await _getBaseUrl();
+      final bytes = await imageFile.readAsBytes();
+      final b64 = base64Encode(bytes);
+      final ext = imageFile.path.split('.').last.toLowerCase();
+      final mime = ext == 'png' ? 'image/png' : 'image/jpeg';
+      final res = await _dio.post('$base/extract',
+          data: jsonEncode(
+              {'image_base64': b64, 'image_mime': mime, 'current_date': _todayDate}),
+          options: _authOptions);
+      return _parseResult(res.data);
+    });
   }
 
-  Future<ExtractionResult> extractFromFile(File file, String fileType) async {
-    final base = await _getBaseUrl();
-    final bytes = await file.readAsBytes();
-    final b64 = base64Encode(bytes);
-    final res = await _dio.post('$base/extract',
-        data: jsonEncode({'file_base64': b64, 'file_type': fileType, 'current_date': _todayDate}),
-        options: _authOptions);
-    return _parseResult(res.data);
+  Future<ExtractionResult> extractFromFile(File file, String fileType) {
+    return _safe(() async {
+      final base = await _getBaseUrl();
+      // Backend only accepts file_base64 for pdf; txt/md must be sent as plain text.
+      if (fileType == 'txt') {
+        final text = await file.readAsString();
+        final res = await _dio.post('$base/extract',
+            data: jsonEncode({'text': text, 'current_date': _todayDate}),
+            options: _authOptions);
+        return _parseResult(res.data);
+      }
+      final bytes = await file.readAsBytes();
+      final b64 = base64Encode(bytes);
+      final res = await _dio.post('$base/extract',
+          data: jsonEncode(
+              {'file_base64': b64, 'file_type': fileType, 'current_date': _todayDate}),
+          options: _authOptions);
+      return _parseResult(res.data);
+    });
   }
 
   ExtractionResult _parseResult(dynamic data) {
@@ -95,70 +111,104 @@ class ApiService {
 
   // ── Cloud sync: read all items ─────────────────────────────────────────────
 
-  Future<ExtractionResult> getItems() async {
-    final base = await _getBaseUrl();
-    final res = await _dio.get('$base/items', options: _authOptions);
-    return _parseResult(res.data);
+  Future<ExtractionResult> getItems() {
+    return _safe(() async {
+      final base = await _getBaseUrl();
+      final res = await _dio.get('$base/items', options: _authOptions);
+      return _parseResult(res.data);
+    });
   }
 
   // ── Events CRUD ────────────────────────────────────────────────────────────
 
-  Future<ScheduleEvent> createEvent(ScheduleEvent event) async {
-    final base = await _getBaseUrl();
-    final res = await _dio.post('$base/items/events',
-        data: jsonEncode(_eventBody(event)), options: _authOptions);
-    return ScheduleEvent.fromJson(_asMap(res.data));
+  Future<ScheduleEvent> createEvent(ScheduleEvent event) {
+    return _safe(() async {
+      final base = await _getBaseUrl();
+      final res = await _dio.post('$base/items/events',
+          data: jsonEncode(_eventBody(event)), options: _authOptions);
+      return ScheduleEvent.fromJson(_asMap(res.data));
+    });
   }
 
-  Future<ScheduleEvent> updateEventApi(ScheduleEvent event) async {
-    final base = await _getBaseUrl();
-    final res = await _dio.put('$base/items/events/${event.id}',
-        data: jsonEncode(_eventBody(event)), options: _authOptions);
-    return ScheduleEvent.fromJson(_asMap(res.data));
+  Future<ScheduleEvent> updateEventApi(ScheduleEvent event) {
+    return _safe(() async {
+      final base = await _getBaseUrl();
+      final res = await _dio.put('$base/items/events/${event.id}',
+          data: jsonEncode(_eventBody(event)), options: _authOptions);
+      return ScheduleEvent.fromJson(_asMap(res.data));
+    });
   }
 
-  Future<void> deleteEventApi(int id) async {
-    final base = await _getBaseUrl();
-    await _dio.delete('$base/items/events/$id', options: _authOptions);
+  /// Returns true if deleted, false if already gone (404 treated as success).
+  Future<bool> deleteEventApi(int id) async {
+    try {
+      final base = await _getBaseUrl();
+      await _dio.delete('$base/items/events/$id', options: _authOptions);
+      return true;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return false;
+      throw _handleError(e);
+    } catch (e) {
+      throw _handleError(e);
+    }
   }
 
-  Future<void> pinEventApi(int id, bool isPinned) async {
-    final base = await _getBaseUrl();
-    await _dio.patch('$base/items/events/$id/pin',
-        data: jsonEncode({'is_pinned': isPinned}), options: _authOptions);
+  Future<void> pinEventApi(int id, bool isPinned) {
+    return _safe(() async {
+      final base = await _getBaseUrl();
+      await _dio.patch('$base/items/events/$id/pin',
+          data: jsonEncode({'is_pinned': isPinned}), options: _authOptions);
+    });
   }
 
   // ── Todos CRUD ─────────────────────────────────────────────────────────────
 
-  Future<Todo> createTodo(Todo todo) async {
-    final base = await _getBaseUrl();
-    final res = await _dio.post('$base/items/todos',
-        data: jsonEncode(_todoBody(todo)), options: _authOptions);
-    return Todo.fromJson(_asMap(res.data));
+  Future<Todo> createTodo(Todo todo) {
+    return _safe(() async {
+      final base = await _getBaseUrl();
+      final res = await _dio.post('$base/items/todos',
+          data: jsonEncode(_todoBody(todo)), options: _authOptions);
+      return Todo.fromJson(_asMap(res.data));
+    });
   }
 
-  Future<Todo> updateTodoApi(Todo todo) async {
-    final base = await _getBaseUrl();
-    final res = await _dio.put('$base/items/todos/${todo.id}',
-        data: jsonEncode(_todoBody(todo)), options: _authOptions);
-    return Todo.fromJson(_asMap(res.data));
+  Future<Todo> updateTodoApi(Todo todo) {
+    return _safe(() async {
+      final base = await _getBaseUrl();
+      final res = await _dio.put('$base/items/todos/${todo.id}',
+          data: jsonEncode(_todoBody(todo)), options: _authOptions);
+      return Todo.fromJson(_asMap(res.data));
+    });
   }
 
-  Future<void> deleteTodoApi(int id) async {
-    final base = await _getBaseUrl();
-    await _dio.delete('$base/items/todos/$id', options: _authOptions);
+  /// Returns true if deleted, false if already gone (404 treated as success).
+  Future<bool> deleteTodoApi(int id) async {
+    try {
+      final base = await _getBaseUrl();
+      await _dio.delete('$base/items/todos/$id', options: _authOptions);
+      return true;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return false;
+      throw _handleError(e);
+    } catch (e) {
+      throw _handleError(e);
+    }
   }
 
-  Future<void> toggleTodoDoneApi(int id, bool isDone) async {
-    final base = await _getBaseUrl();
-    await _dio.patch('$base/items/todos/$id/done',
-        data: jsonEncode({'is_done': isDone}), options: _authOptions);
+  Future<void> toggleTodoDoneApi(int id, bool isDone) {
+    return _safe(() async {
+      final base = await _getBaseUrl();
+      await _dio.patch('$base/items/todos/$id/done',
+          data: jsonEncode({'is_done': isDone}), options: _authOptions);
+    });
   }
 
-  Future<void> pinTodoApi(int id, bool isPinned) async {
-    final base = await _getBaseUrl();
-    await _dio.patch('$base/items/todos/$id/pin',
-        data: jsonEncode({'is_pinned': isPinned}), options: _authOptions);
+  Future<void> pinTodoApi(int id, bool isPinned) {
+    return _safe(() async {
+      final base = await _getBaseUrl();
+      await _dio.patch('$base/items/todos/$id/pin',
+          data: jsonEncode({'is_pinned': isPinned}), options: _authOptions);
+    });
   }
 
   // ── AI Chat Planning ──────────────────────────────────────────────────────
@@ -321,6 +371,13 @@ class ApiService {
     });
   }
 
+  Future<void> refreshRecommendations() {
+    return _safe(() async {
+      final base = await _getBaseUrl();
+      await _dio.post('$base/recommendations/refresh', options: _authOptions);
+    });
+  }
+
   Future<void> markAsRead(int contentId) async {
     return _safe(() async {
       final base = await _getBaseUrl();
@@ -384,19 +441,30 @@ class ApiService {
           queryParameters:
               reportDate != null ? {'report_date': reportDate} : null,
           options: _authOptions);
-      return ArxivReport.fromJson(_asMap(res.data['report'] ?? res.data));
+      final data = _asMap(res.data);
+      if (data['status'] == 'skipped') {
+        throw Exception('暂无可用的 arXiv 推荐内容，请先完善用户画像或等待推荐更新');
+      }
+      final report = data['report'];
+      if (report == null) throw Exception('日报生成失败：服务器未返回报告内容');
+      return ArxivReport.fromJson(_asMap(report));
     });
   }
 
   Future<ArxivReport?> getTodayReport() async {
-    return _safe(() async {
+    try {
       final base = await _getBaseUrl();
       final res =
           await _dio.get('$base/arxiv/report/today', options: _authOptions);
       final report = res.data['report'];
       if (report == null) return null;
       return ArxivReport.fromJson(_asMap(report));
-    });
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null; // no report today
+      throw _handleError(e);
+    } catch (e) {
+      throw _handleError(e);
+    }
   }
 
   Future<List<ArxivReport>> getReports({int limit = 30}) async {

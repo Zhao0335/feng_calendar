@@ -40,7 +40,13 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
             },
             selectedColor: cs.primaryContainer,
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 4),
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: '刷新推荐',
+            onPressed: _refreshRecommendations,
+          ),
+          const SizedBox(width: 4),
         ],
       ),
       body: Consumer<AppProvider>(
@@ -101,6 +107,28 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
         },
       ),
     );
+  }
+
+  Future<void> _refreshRecommendations() async {
+    try {
+      await context.read<AppProvider>().refreshRecommendations();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('推荐已更新'),
+        backgroundColor: const Color(0xFF22C55E),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(12),
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('刷新失败: $e'),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(12),
+      ));
+    }
   }
 
   Future<void> _markRead(RecommendationItem item) async {
