@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../models/models.dart';
@@ -183,4 +184,330 @@ class AppProvider extends ChangeNotifier {
       });
     notifyListeners();
   }
+
+  // ── AI Chat Planning ──────────────────────────────────────────────────────
+
+  String? _currentSessionId;
+  List<ChatMessage> _chatHistory = [];
+  ChatDraft? _currentDraft;
+  bool _chatLoading = false;
+
+  String? get currentSessionId => _currentSessionId;
+  List<ChatMessage> get chatHistory => _chatHistory;
+  ChatDraft? get currentDraft => _currentDraft;
+  bool get chatLoading => _chatLoading;
+
+  Future<void> startChatPlanning(String request) async {
+    _chatLoading = true;
+    notifyListeners();
+    try {
+      final result = await api.startChatPlanning(request);
+      _currentSessionId = result['session_id'] as String?;
+      _chatHistory = [
+        ChatMessage(role: ChatMessageRole.user, content: request),
+        ChatMessage(
+            role: ChatMessageRole.assistant,
+            content: result['ai_response'] as String? ?? ''),
+      ];
+      _chatLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _chatLoading = false;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<void> sendChatMessage(String message) async {
+    if (_currentSessionId == null) {
+      await startChatPlanning(message);
+      return;
+    }
+    _chatHistory = [
+      ..._chatHistory,
+      ChatMessage(role: ChatMessageRole.user, content: message),
+    ];
+    _chatLoading = true;
+    notifyListeners();
+    try {
+      final result = await api.sendChatMessage(
+        sessionId: _currentSessionId!,
+        message: message,
+      );
+      _chatHistory = [
+        ..._chatHistory,
+        ChatMessage(
+            role: ChatMessageRole.assistant,
+            content: result['ai_response'] as String? ?? ''),
+      ];
+      _chatLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _chatLoading = false;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<void> createDraft(String message) async {
+    if (_currentSessionId == null) return;
+    _chatLoading = true;
+    notifyListeners();
+    try {
+      final result = await api.createDraft(
+        sessionId: _currentSessionId!,
+        message: message,
+      );
+      _currentDraft = ChatDraft.fromJson(
+          _asMap(result['draft'] ?? result));
+      _chatLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _chatLoading = false;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<void> confirmDraft(bool confirm) async {
+    if (_currentDraft == null) return;
+    await api.confirmDraft(
+      draftId: _currentDraft!.id,
+      confirm: confirm,
+    );
+    if (confirm) {
+      await _syncFromServer();
+    }
+    _currentDraft = null;
+    _currentSessionId = null;
+    _chatHistory = [];
+    notifyListeners();
+  }
+
+  void clearChat() {
+    _currentSessionId = null;
+    _chatHistory = [];
+    _currentDraft = null;
+    _chatLoading = false;
+    notifyListeners();
+  }
+
+  void cancelChatRequest() {
+    _chatLoading = false;
+    if (_chatHistory.isNotEmpty &&
+        _chatHistory.last.role == ChatMessageRole.user) {
+      _chatHistory = _chatHistory.sublist(0, _chatHistory.length - 1);
+    }
+    notifyListeners();
+  }
+
+  // ── User Profile / Interests ─────────────────────────────────────────────
+
+  List<Interest> _interests = [];
+  Map<String, dynamic>? _profileSummary;
+  bool _profileLoading = false;
+
+  List<Interest> get interests => _interests;
+  Map<String, dynamic>? get profileSummary => _profileSummary;
+  bool get profileLoading => _profileLoading;
+
+  Future<void> loadInterests() async {
+    _profileLoading = true;
+    notifyListeners();
+    try {
+      _interests = await api.getInterests();
+      _profileLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _profileLoading = false;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<void> addInterest({
+    required String category,
+    required String tag,
+    required List<String> keywords,
+    double weight = 1.0,
+  }) async {
+    await api.addInterest(
+      category: category,
+      tag: tag,
+      keywords: keywords,
+      weight: weight,
+    );
+    await loadInterests();
+  }
+
+  Future<void> deleteInterest(int interestId) async {
+    await api.deleteInterest(interestId);
+    await loadInterests();
+  }
+
+  Future<void> loadProfileSummary() async {
+    _profileSummary = await api.getProfileSummary();
+    notifyListeners();
+  }
+
+  // ── Recommendations ──────────────────────────────────────────────────────
+
+  List<RecommendationItem> _recommendations = [];
+  int _recommendationTotal = 0;
+  bool _recommendationsLoading = false;
+
+  List<RecommendationItem> get recommendations => _recommendations;
+  int get recommendationTotal => _recommendationTotal;
+  bool get recommendationsLoading => _recommendationsLoading;
+
+  Future<void> loadRecommendations({bool unreadOnly = false}) async {
+    _recommendationsLoading = true;
+    notifyListeners();
+    try {
+      final result = await api.getRecommendations(unreadOnly: unreadOnly);
+      final items = result['items'] as List<dynamic>? ?? [];
+      _recommendations = items
+          .map((e) => RecommendationItem.fromJson(e as Map<String, dynamic>))
+          .toList();
+      _recommendationTotal = result['total'] as int? ?? 0;
+      _recommendationsLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _recommendationsLoading = false;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<void> markRecommendationRead(int contentId) async {
+    await api.markAsRead(contentId);
+    _recommendations = _recommendations.map((r) {
+      if (r.contentId == contentId) {
+        return RecommendationItem(
+          id: r.id,
+          contentId: r.contentId,
+          score: r.score,
+          read: true,
+          saved: r.saved,
+          source: r.source,
+          title: r.title,
+          description: r.description,
+          url: r.url,
+          author: r.author,
+          publishedDate: r.publishedDate,
+          contentType: r.contentType,
+          tags: r.tags,
+        );
+      }
+      return r;
+    }).toList();
+    notifyListeners();
+  }
+
+  Future<void> saveRecommendation(int contentId) async {
+    await api.saveContent(contentId);
+    _recommendations = _recommendations.map((r) {
+      if (r.contentId == contentId) {
+        return RecommendationItem(
+          id: r.id,
+          contentId: r.contentId,
+          score: r.score,
+          read: r.read,
+          saved: true,
+          source: r.source,
+          title: r.title,
+          description: r.description,
+          url: r.url,
+          author: r.author,
+          publishedDate: r.publishedDate,
+          contentType: r.contentType,
+          tags: r.tags,
+        );
+      }
+      return r;
+    }).toList();
+    notifyListeners();
+  }
+
+  // ── arXiv Daily Report ───────────────────────────────────────────────────
+
+  ArxivReport? _todayReport;
+  List<ArxivReport> _reportHistory = [];
+  ArxivPreference _arxivPreference = const ArxivPreference();
+  bool _reportLoading = false;
+
+  ArxivReport? get todayReport => _todayReport;
+  List<ArxivReport> get reportHistory => _reportHistory;
+  ArxivPreference get arxivPreference => _arxivPreference;
+  bool get reportLoading => _reportLoading;
+
+  Future<void> loadTodayReport() async {
+    _reportLoading = true;
+    notifyListeners();
+    try {
+      _todayReport = await api.getTodayReport();
+      _reportLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _todayReport = null;
+      _reportLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadReportHistory() async {
+    _reportLoading = true;
+    notifyListeners();
+    try {
+      _reportHistory = await api.getReports();
+      _reportLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _reportLoading = false;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<void> generateReport({String? reportDate}) async {
+    _reportLoading = true;
+    notifyListeners();
+    try {
+      final report = await api.generateReport(reportDate: reportDate);
+      _todayReport = report;
+      _reportLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _reportLoading = false;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<void> loadArxivPreference() async {
+    try {
+      _arxivPreference = await api.getArxivPreference();
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<void> updateArxivPreference({
+    String? pushTime,
+    int? paperCount,
+    List<String>? categories,
+    bool? isEnabled,
+  }) async {
+    _arxivPreference = await api.updateArxivPreference(
+      pushTime: pushTime,
+      paperCount: paperCount,
+      categories: categories,
+      isEnabled: isEnabled,
+    );
+    notifyListeners();
+  }
+
+  // ── Private helpers ────────────────────────────────────────────────────────
+
+  Map<String, dynamic> _asMap(dynamic d) =>
+      d is String ? jsonDecode(d) as Map<String, dynamic> : d as Map<String, dynamic>;
 }
