@@ -30,6 +30,7 @@ dependencies:
   # 工具
   intl: ^0.19.0
   path: ^1.9.0
+  url_launcher: ^6.3.0
   flutter_markdown_plus: ^1.0.7
 
   # Widget 桥接（iOS/macOS 小组件）
@@ -44,11 +45,16 @@ dev_dependencies:
   flutter_launcher_icons: ^0.14.4
 
 flutter_launcher_icons:
-  ios: true
   image_path: "assets/icon.png"
+  ios: true
+  android: true
   macos:
     generate: true
     image_path: "assets/icon.png"
+  windows:
+    generate: true
+    image_path: "assets/icon.png"
+    icon_size: 48
 
 flutter:
   uses-material-design: true
