@@ -56,29 +56,48 @@ class ScheduleApp extends StatelessWidget {
     final scheme = ColorScheme.fromSeed(
       seedColor: const Color(0xFF5B4CF5),
       brightness: brightness,
+      dynamicSchemeVariant: DynamicSchemeVariant.vibrant,
     );
+    final isDark = brightness == Brightness.dark;
+
     return ThemeData(
       colorScheme: scheme,
       useMaterial3: true,
+
+      // ── AppBar ──────────────────────────────────────────────────────────
       appBarTheme: AppBarTheme(
-        scrolledUnderElevation: 0,
+        scrolledUnderElevation: 0.5,
+        shadowColor: scheme.shadow.withValues(alpha: 0.08),
         centerTitle: false,
         elevation: 0,
         backgroundColor: scheme.surface,
+        surfaceTintColor: Colors.transparent,
         titleTextStyle: TextStyle(
-          fontSize: 22,
-          fontWeight: FontWeight.w700,
+          fontSize: 20,
+          fontWeight: FontWeight.w800,
           color: scheme.onSurface,
-          letterSpacing: -0.3,
+          letterSpacing: -0.5,
         ),
+        iconTheme: IconThemeData(color: scheme.onSurfaceVariant),
+        actionsIconTheme: IconThemeData(color: scheme.onSurfaceVariant),
       ),
+
+      // ── Cards ───────────────────────────────────────────────────────────
       cardTheme: CardThemeData(
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        color: isDark ? scheme.surfaceContainer : scheme.surface,
         surfaceTintColor: Colors.transparent,
+        shadowColor: scheme.shadow.withValues(alpha: 0.08),
       ),
+
+      // ── Input fields ─────────────────────────────────────────────────────
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
+        fillColor: isDark
+            ? scheme.surfaceContainerHighest.withValues(alpha: 0.6)
+            : scheme.surfaceContainerLowest,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
@@ -97,31 +116,82 @@ class ScheduleApp extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: scheme.error, width: 1.5),
         ),
+        labelStyle: TextStyle(color: scheme.onSurfaceVariant, fontSize: 14),
+        hintStyle: TextStyle(
+            color: scheme.onSurfaceVariant.withValues(alpha: 0.6),
+            fontSize: 14),
       ),
-      navigationBarTheme: NavigationBarThemeData(
-        elevation: 0,
-        indicatorShape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+
+      // ── Chips ────────────────────────────────────────────────────────────
+      chipTheme: ChipThemeData(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        side: BorderSide.none,
+      ),
+
+      // ── Dialogs ──────────────────────────────────────────────────────────
+      dialogTheme: DialogThemeData(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        elevation: 8,
+        shadowColor: scheme.shadow.withValues(alpha: 0.2),
+      ),
+
+      // ── Buttons ──────────────────────────────────────────────────────────
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
+          minimumSize: const Size(64, 44),
+          textStyle:
+              const TextStyle(fontWeight: FontWeight.w600, letterSpacing: 0.2),
         ),
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
       ),
-      tabBarTheme: const TabBarThemeData(
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
+          minimumSize: const Size(64, 44),
+        ),
+      ),
+
+      // ── Tabs ─────────────────────────────────────────────────────────────
+      tabBarTheme: TabBarThemeData(
         dividerColor: Colors.transparent,
         indicatorSize: TabBarIndicatorSize.tab,
-        labelStyle: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-        unselectedLabelStyle:
-            TextStyle(fontWeight: FontWeight.normal, fontSize: 13),
+        labelStyle: const TextStyle(
+            fontWeight: FontWeight.w700, fontSize: 13, letterSpacing: 0.1),
+        unselectedLabelStyle: TextStyle(
+            fontWeight: FontWeight.w500,
+            fontSize: 13,
+            color: scheme.onSurfaceVariant),
+        overlayColor: WidgetStatePropertyAll(
+            scheme.primary.withValues(alpha: 0.08)),
       ),
+
+      // ── Segmented button ─────────────────────────────────────────────────
       segmentedButtonTheme: SegmentedButtonThemeData(
         style: ButtonStyle(
           shape: WidgetStatePropertyAll(
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
           padding: const WidgetStatePropertyAll(
-            EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          ),
+              EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+          textStyle: const WidgetStatePropertyAll(
+              TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
         ),
       ),
+
+      // ── List tiles ───────────────────────────────────────────────────────
+      listTileTheme: ListTileThemeData(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        minVerticalPadding: 8,
+      ),
+
+      // ── Scaffold ─────────────────────────────────────────────────────────
+      scaffoldBackgroundColor: isDark
+          ? scheme.surfaceContainerLowest
+          : scheme.surfaceContainerLowest,
     );
   }
 }

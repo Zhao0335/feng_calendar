@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'dart:math';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/models.dart';
@@ -131,15 +131,28 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
       context.read<AppProvider>().markRecommendationRead(item.contentId);
     }
     final url = item.url;
-    if (url == null || url.isEmpty) return;
+    if (url == null || url.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('该内容没有链接'),
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.all(12),
+      ));
+      return;
+    }
+
+    // Show immediate feedback
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: const Text('正在打开…'),
+      duration: const Duration(seconds: 1),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      margin: const EdgeInsets.all(12),
+    ));
+
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
     try {
-      if (Platform.isWindows) {
-        await Process.run('cmd', ['/c', 'start', '', url], runInShell: false);
-      } else if (Platform.isMacOS) {
-        await Process.run('open', [url]);
-      } else if (Platform.isLinux) {
-        await Process.run('xdg-open', [url]);
-      }
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(

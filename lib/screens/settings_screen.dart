@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/models.dart';
 import '../providers/app_provider.dart';
-import '../services/api_service.dart';
 import '../services/auth_service.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -13,54 +13,15 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final _urlController = TextEditingController();
-  final _modelController = TextEditingController();
-  bool _isChecking = false;
-  bool? _connectionOk;
-
-  static const _modelKey = 'model_name';
-
   @override
   void initState() {
     super.initState();
-    _loadSettings();
-  }
-
-  @override
-  void dispose() {
-    _urlController.dispose();
-    _modelController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _urlController.text =
-          prefs.getString('server_base_url') ?? 'http://101.37.80.57:5522';
-      _modelController.text = prefs.getString(_modelKey) ?? 'qwen2.5:72b';
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AppProvider>().loadInterests();
     });
   }
 
-  Future<void> _saveSettings() async {
-    await context.read<ApiService>().setBaseUrl(_urlController.text);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_modelKey, _modelController.text.trim());
-  }
-
-  Future<void> _checkConnection() async {
-    setState(() {
-      _isChecking = true;
-      _connectionOk = null;
-    });
-    await _saveSettings();
-    if (!mounted) return;
-    final ok = await context.read<ApiService>().healthCheck();
-    setState(() {
-      _isChecking = false;
-      _connectionOk = ok;
-    });
-  }
+  // ── Logout ────────────────────────────────────────────────────────────────
 
   Future<void> _logout() async {
     final confirmed = await showDialog<bool>(
@@ -80,13 +41,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     if (confirmed != true || !mounted) return;
     final prefs = await SharedPreferences.getInstance();
-    final baseUrl = prefs.getString('server_base_url') ?? 'http://101.37.80.57:5522';
+    final baseUrl =
+        prefs.getString('server_base_url') ?? 'http://101.37.80.57:5522';
     if (!mounted) return;
     await context.read<AuthService>().logout(baseUrl);
   }
 
+  // ── Clear data ────────────────────────────────────────────────────────────
+
   Future<void> _clearData() async {
-    if (!mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -107,16 +70,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (confirmed == true && mounted) {
       await context.read<AppProvider>().clearAll();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: const Text('本地数据已清除'),
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          margin: const EdgeInsets.all(12),
-        ));
+        _snack('本地数据已清除');
       }
     }
   }
+
+  // ── Interests ─────────────────────────────────────────────────────────────
+
+  Future<void> _deleteInterest(int id) async {
+    try {
+      await context.read<AppProvider>().deleteInterest(id);
+      _snack('已删除', color: const Color(0xFF22C55E));
+    } catch (e) {
+      _snack('删除失败: $e');
+    }
+  }
+
+  void _showAddDialog() {
+    showDialog(context: context, builder: (_) => const _AddInterestDialog());
+  }
+
+  void _snack(String msg, {Color? color}) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: color,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      margin: const EdgeInsets.all(12),
+    ));
+  }
+
+  // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -127,138 +111,116 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
+          // ── 账户 ───────────────────────────────────────────────────────────
           const _GroupLabel('账户'),
-          _GroupCard(
+          _GroupCard(children: [
+            ListTile(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
+              leading: Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.person_rounded, size: 18, color: cs.primary),
+              ),
+              title: Text(
+                context.watch<AuthService>().username ?? '未知用户',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text('已登录',
+                  style: TextStyle(fontSize: 12, color: cs.outline)),
+              trailing: TextButton(
+                onPressed: _logout,
+                child:
+                    Text('退出', style: TextStyle(color: cs.error, fontSize: 13)),
+              ),
+            ),
+          ]),
+
+          const SizedBox(height: 24),
+
+          // ── 用户画像 ────────────────────────────────────────────────────────
+          Row(
             children: [
-              ListTile(
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
-                leading: Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: cs.primaryContainer,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(Icons.person_rounded,
-                      size: 18, color: cs.primary),
-                ),
-                title: Text(
-                  context.watch<AuthService>().username ?? '未知用户',
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                subtitle: Text('已登录',
-                    style: TextStyle(fontSize: 12, color: cs.outline)),
-                trailing: TextButton(
-                  onPressed: _logout,
-                  child: Text('退出',
-                      style: TextStyle(color: cs.error, fontSize: 13)),
+              const _GroupLabel('用户画像'),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: _showAddDialog,
+                icon: const Icon(Icons.add_rounded, size: 16),
+                label: const Text('添加标签', style: TextStyle(fontSize: 13)),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
               ),
+              const SizedBox(width: 4),
             ],
           ),
-          const SizedBox(height: 24),
-          const _GroupLabel('服务器连接'),
-          _GroupCard(
-            children: [
-              _FieldTile(
-                icon: Icons.dns_rounded,
-                iconColor: cs.primary,
-                label: '服务器地址',
-                controller: _urlController,
-                hint: 'http://192.168.1.100:8000',
-                onEditingComplete: _saveSettings,
-              ),
-              _Divider(),
-              _FieldTile(
-                icon: Icons.auto_awesome_rounded,
-                iconColor: cs.tertiary,
-                label: '模型名称',
-                controller: _modelController,
-                hint: 'qwen2.5:72b',
-                onEditingComplete: _saveSettings,
-              ),
-              _Divider(),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: FilledButton.tonal(
-                        onPressed: _isChecking ? null : _checkConnection,
-                        child: _isChecking
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2),
-                              )
-                            : const Text('测试连接'),
-                      ),
+          Consumer<AppProvider>(
+            builder: (_, provider, __) {
+              if (provider.profileLoading && provider.interests.isEmpty) {
+                return const _GroupCard(children: [
+                  Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                ]);
+              }
+              if (provider.interests.isEmpty) {
+                return _GroupCard(children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      '暂无兴趣标签，点击右上角添加',
+                      style: TextStyle(fontSize: 13, color: cs.outline),
                     ),
-                    if (_connectionOk != null) ...[
-                      const SizedBox(width: 12),
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 200),
-                        child: Row(
-                          key: ValueKey(_connectionOk),
-                          children: [
-                            Icon(
-                              _connectionOk!
-                                  ? Icons.check_circle_rounded
-                                  : Icons.cancel_rounded,
-                              size: 18,
-                              color: _connectionOk!
-                                  ? const Color(0xFF22C55E)
-                                  : cs.error,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              _connectionOk! ? '连接正常' : '连接失败',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: _connectionOk!
-                                    ? const Color(0xFF22C55E)
-                                    : cs.error,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          const _GroupLabel('数据管理'),
-          _GroupCard(
-            children: [
-              ListTile(
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
-                leading: Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: cs.errorContainer,
-                    borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(Icons.delete_rounded,
-                      size: 18, color: cs.onErrorContainer),
+                ]);
+              }
+              return _GroupCard(children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                  child: _InterestsContent(
+                    interests: provider.interests,
+                    onDelete: _deleteInterest,
+                  ),
                 ),
-                title: const Text('清除本地数据',
-                    style: TextStyle(fontWeight: FontWeight.w500)),
-                subtitle: Text('删除所有日程和待办记录',
-                    style: TextStyle(fontSize: 12, color: cs.outline)),
-                trailing: Icon(Icons.chevron_right_rounded,
-                    size: 18, color: cs.outline),
-                onTap: _clearData,
-              ),
-            ],
+              ]);
+            },
           ),
+
+          const SizedBox(height: 24),
+
+          // ── 数据管理 ────────────────────────────────────────────────────────
+          const _GroupLabel('数据管理'),
+          _GroupCard(children: [
+            ListTile(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
+              leading: Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: cs.errorContainer,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.delete_rounded,
+                    size: 18, color: cs.onErrorContainer),
+              ),
+              title: const Text('清除本地数据',
+                  style: TextStyle(fontWeight: FontWeight.w500)),
+              subtitle: Text('删除所有日程和待办记录',
+                  style: TextStyle(fontSize: 12, color: cs.outline)),
+              trailing:
+                  Icon(Icons.chevron_right_rounded, size: 18, color: cs.outline),
+              onTap: _clearData,
+            ),
+          ]),
+
           const SizedBox(height: 32),
           Center(
             child: Text(
@@ -274,6 +236,171 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 }
+
+// ── Interests content ─────────────────────────────────────────────────────────
+
+class _InterestsContent extends StatelessWidget {
+  final List<Interest> interests;
+  final void Function(int id) onDelete;
+
+  const _InterestsContent(
+      {required this.interests, required this.onDelete});
+
+  static const _categories = [
+    ('research', '研究领域', Icons.science_rounded),
+    ('project', '项目类型', Icons.folder_rounded),
+    ('skill', '技术技能', Icons.code_rounded),
+  ];
+
+  static const _colors = {
+    'research': Color(0xFF6366F1),
+    'project': Color(0xFFF97316),
+    'skill': Color(0xFF22C55E),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final widgets = <Widget>[];
+
+    for (final (cat, label, icon) in _categories) {
+      final items = interests.where((i) => i.category == cat).toList();
+      if (items.isEmpty) continue;
+      final color = _colors[cat] ?? cs.primary;
+
+      if (widgets.isNotEmpty) widgets.add(const SizedBox(height: 12));
+      widgets.add(Row(children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 5),
+        Text(label,
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: color,
+                letterSpacing: 0.3)),
+      ]));
+      widgets.add(const SizedBox(height: 6));
+      widgets.add(Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: items.map((interest) {
+          return Chip(
+            avatar: Icon(icon, size: 13, color: color),
+            label: Text(interest.tag),
+            labelStyle: const TextStyle(fontSize: 12),
+            deleteIconColor: cs.outline,
+            onDeleted:
+                interest.id != null ? () => onDelete(interest.id!) : null,
+            side: BorderSide(color: color.withValues(alpha: 0.3)),
+            backgroundColor: color.withValues(alpha: 0.08),
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+          );
+        }).toList(),
+      ));
+    }
+
+    return Column(
+        crossAxisAlignment: CrossAxisAlignment.start, children: widgets);
+  }
+}
+
+// ── Add Interest Dialog ───────────────────────────────────────────────────────
+
+class _AddInterestDialog extends StatefulWidget {
+  const _AddInterestDialog();
+
+  @override
+  State<_AddInterestDialog> createState() => _AddInterestDialogState();
+}
+
+class _AddInterestDialogState extends State<_AddInterestDialog> {
+  final _formKey = GlobalKey<FormState>();
+  String _category = 'skill';
+  String _tag = '';
+  String _keywords = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return AlertDialog(
+      title: const Text('添加兴趣标签'),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      content: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButtonFormField<String>(
+              initialValue: _category,
+              items: const [
+                DropdownMenuItem(value: 'research', child: Text('研究领域')),
+                DropdownMenuItem(value: 'project', child: Text('项目类型')),
+                DropdownMenuItem(value: 'skill', child: Text('技术技能')),
+              ],
+              onChanged: (v) => setState(() => _category = v!),
+              decoration: InputDecoration(
+                  labelText: '分类',
+                  filled: true,
+                  fillColor: cs.surfaceContainerLow),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              decoration: InputDecoration(
+                  labelText: '标签名称',
+                  filled: true,
+                  fillColor: cs.surfaceContainerLow),
+              onSaved: (v) => _tag = v!,
+              validator: (v) => v?.isEmpty ?? true ? '请输入标签名称' : null,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              decoration: InputDecoration(
+                labelText: '关键词',
+                hintText: '如：大模型、agent、pytorch（逗号分隔）',
+                helperText: '中文关键词会自动翻译为英文',
+                filled: true,
+                fillColor: cs.surfaceContainerLow,
+              ),
+              onSaved: (v) => _keywords = v!,
+              validator: (v) => v?.isEmpty ?? true ? '请输入关键词' : null,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context), child: const Text('取消')),
+        FilledButton(onPressed: _submit, child: const Text('添加')),
+      ],
+    );
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    _formKey.currentState!.save();
+    try {
+      await context.read<AppProvider>().addInterest(
+            category: _category,
+            tag: _tag,
+            keywords: _keywords.split(',').map((k) => k.trim()).toList(),
+          );
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('添加失败: $e'),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(12),
+      ));
+    }
+  }
+}
+
+// ── Shared sub-widgets ────────────────────────────────────────────────────────
 
 class _GroupLabel extends StatelessWidget {
   final String text;
@@ -314,84 +441,7 @@ class _GroupCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: children,
-      ),
-    );
-  }
-}
-
-class _Divider extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Divider(
-      height: 1,
-      indent: 16,
-      endIndent: 16,
-      color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5),
-    );
-  }
-}
-
-class _FieldTile extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final String label;
-  final TextEditingController controller;
-  final String hint;
-  final VoidCallback? onEditingComplete;
-
-  const _FieldTile({
-    required this.icon,
-    required this.iconColor,
-    required this.label,
-    required this.controller,
-    required this.hint,
-    this.onEditingComplete,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, size: 18, color: iconColor),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              onEditingComplete: onEditingComplete,
-              style: const TextStyle(fontSize: 14),
-              decoration: InputDecoration(
-                labelText: label,
-                hintText: hint,
-                hintStyle: TextStyle(color: cs.outline, fontSize: 13),
-                labelStyle: TextStyle(color: cs.outline, fontSize: 13),
-                filled: false,
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(color: cs.primary, width: 1.5),
-                ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                isDense: true,
-              ),
-            ),
-          ),
-        ],
-      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
     );
   }
 }
