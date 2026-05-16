@@ -101,7 +101,6 @@ class _EditEventSheetState extends State<_EditEventSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     return Padding(
       padding: EdgeInsets.only(
           bottom: MediaQuery.viewInsetsOf(context).bottom),

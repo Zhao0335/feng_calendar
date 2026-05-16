@@ -37,7 +37,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _urlController.text =
-          prefs.getString('server_base_url') ?? 'http://192.168.1.100:8000';
+          prefs.getString('server_base_url') ?? 'http://101.37.80.57:5522';
       _modelController.text = prefs.getString(_modelKey) ?? 'qwen2.5:72b';
     });
   }
@@ -54,6 +54,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _connectionOk = null;
     });
     await _saveSettings();
+    if (!mounted) return;
     final ok = await context.read<ApiService>().healthCheck();
     setState(() {
       _isChecking = false;

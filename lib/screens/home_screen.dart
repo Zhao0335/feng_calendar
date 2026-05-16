@@ -1,11 +1,16 @@
-import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import 'input_screen.dart';
 import 'items_screen.dart';
+import 'profile_screen.dart';
+import 'recommendations_screen.dart';
+import 'daily_report_screen.dart';
 import 'settings_screen.dart';
+import '../widgets/floating_chat_button.dart';
+import 'chat_planning_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -17,6 +22,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
   AppProvider? _provider;
+  bool _extractionNavigated = false; // prevent repeated auto-switch after extraction
 
   static const _fileChannel =
       MethodChannel('com.example.fengCalendar/file_open');
@@ -24,18 +30,27 @@ class _HomeScreenState extends State<HomeScreen> {
   final _screens = const [
     InputScreen(),
     ItemsScreen(),
+    ProfileScreen(),
+    RecommendationsScreen(),
+    DailyReportScreen(),
     SettingsScreen(),
   ];
 
-  final _labels = const ['输入', '列表', '设置'];
+  final _labels = const ['输入', '列表', '画像', '推荐', '日报', '设置'];
   final _icons = const [
     Icons.add_circle_outline,
     Icons.list_alt_outlined,
+    Icons.person_outline_rounded,
+    Icons.recommend_outlined,
+    Icons.article_outlined,
     Icons.settings_outlined,
   ];
   final _activeIcons = const [
     Icons.add_circle,
     Icons.list_alt,
+    Icons.person_rounded,
+    Icons.recommend_rounded,
+    Icons.article_rounded,
     Icons.settings,
   ];
 
@@ -46,7 +61,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _provider = context.read<AppProvider>();
       _provider!.loadLocal();
       _provider!.addListener(_onProviderChange);
-      if (Platform.isIOS) {
+      if (!kIsWeb) {
         _fileChannel.setMethodCallHandler(_handleFileOpen);
         _checkPendingFile();
       }
@@ -60,10 +75,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _onProviderChange() {
-    if (_provider?.status == ExtractionStatus.success && _currentIndex != 1) {
+    final status = _provider?.status;
+    if (status == ExtractionStatus.loading) {
+      _extractionNavigated = false;
+    } else if (status == ExtractionStatus.success && !_extractionNavigated) {
+      _extractionNavigated = true;
       setState(() => _currentIndex = 1);
     }
-    // Switch to input tab when a file is waiting to be imported
     if (_provider?.pendingFilePath != null && _currentIndex != 0) {
       setState(() => _currentIndex = 0);
     }
@@ -88,6 +106,28 @@ class _HomeScreenState extends State<HomeScreen> {
         if (mounted) setState(() => _currentIndex = 0);
       }
     } catch (_) {}
+  }
+
+  void _openChat() {
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => const ChatPlanningScreen(),
+        transitionsBuilder: (_, animation, __, child) {
+          return FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 0.1),
+                end: Offset.zero,
+              ).animate(animation),
+              child: child,
+            ),
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 300),
+      ),
+    );
   }
 
   @override
@@ -116,7 +156,14 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const VerticalDivider(width: 1),
-          Expanded(child: _screens[_currentIndex]),
+          Expanded(
+            child: Stack(
+              children: [
+                _screens[_currentIndex],
+                FloatingChatButton(onTap: _openChat),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -124,7 +171,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildNarrowLayout() {
     return Scaffold(
-      body: _screens[_currentIndex],
+      body: Stack(
+        children: [
+          _screens[_currentIndex],
+          FloatingChatButton(onTap: _openChat),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (i) => setState(() => _currentIndex = i),

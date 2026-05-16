@@ -1,3 +1,45 @@
+import 'dart:convert';
+
+bool _parseBool(dynamic v) {
+  if (v is bool) return v;
+  if (v is int) return v == 1;
+  return false;
+}
+
+List<String> _parseStringList(dynamic v, List<String> fallback) {
+  if (v is List) return v.map((e) => e.toString()).toList();
+  if (v is String) {
+    try {
+      final decoded = jsonDecode(v);
+      if (decoded is List) return decoded.map((e) => e.toString()).toList();
+    } catch (_) {}
+  }
+  return fallback;
+}
+
+/// Parses a field that may be a JSON-encoded string or a proper List of Maps.
+List<T> _parseObjectList<T>(
+    dynamic v, T Function(Map<String, dynamic>) fromJson) {
+  List<dynamic> list;
+  if (v is List) {
+    list = v;
+  } else if (v is String) {
+    try {
+      final decoded = jsonDecode(v);
+      if (decoded is List) {
+        list = decoded;
+      } else {
+        return [];
+      }
+    } catch (_) {
+      return [];
+    }
+  } else {
+    return [];
+  }
+  return list.whereType<Map<String, dynamic>>().map(fromJson).toList();
+}
+
 class ScheduleEvent {
   final int? id;
   final String title;
@@ -27,7 +69,7 @@ class ScheduleEvent {
       time: json['time'] as String?,
       location: json['location'] as String?,
       notes: json['notes'] as String?,
-      isPinned: (json['is_pinned'] as int?) == 1,
+      isPinned: _parseBool(json['is_pinned']),
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'] as String)
           : DateTime.now(),
@@ -121,8 +163,8 @@ class Todo {
       deadline: json['deadline'] as String?,
       priority: _parsePriority(json['priority'] as String?),
       notes: json['notes'] as String?,
-      isDone: (json['is_done'] as int?) == 1,
-      isPinned: (json['is_pinned'] as int?) == 1,
+      isDone: _parseBool(json['is_done']),
+      isPinned: _parseBool(json['is_pinned']),
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'] as String)
           : DateTime.now(),
@@ -222,4 +264,216 @@ class ExtractionResult {
 
   bool get isEmpty => events.isEmpty && todos.isEmpty;
   int get totalCount => events.length + todos.length;
+}
+
+enum ChatMessageRole { user, assistant }
+
+class ChatMessage {
+  final ChatMessageRole role;
+  final String content;
+
+  const ChatMessage({required this.role, required this.content});
+
+  factory ChatMessage.fromJson(Map<String, dynamic> json) {
+    return ChatMessage(
+      role: json['role'] == 'user'
+          ? ChatMessageRole.user
+          : ChatMessageRole.assistant,
+      content: json['content'] as String? ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'role': role == ChatMessageRole.user ? 'user' : 'assistant',
+        'content': content,
+      };
+}
+
+class ProposedEvent {
+  final String title;
+  final String? date;
+  final String? time;
+
+  const ProposedEvent({required this.title, this.date, this.time});
+
+  factory ProposedEvent.fromJson(Map<String, dynamic> json) {
+    return ProposedEvent(
+      title: json['title'] as String? ?? '',
+      date: json['date'] as String?,
+      time: json['time'] as String?,
+    );
+  }
+}
+
+class ProposedTodo {
+  final String title;
+  final String? deadline;
+  final String? priority;
+
+  const ProposedTodo({required this.title, this.deadline, this.priority});
+
+  factory ProposedTodo.fromJson(Map<String, dynamic> json) {
+    return ProposedTodo(
+      title: json['title'] as String? ?? '',
+      deadline: json['deadline'] as String?,
+      priority: json['priority'] as String?,
+    );
+  }
+}
+
+class ChatDraft {
+  final int id;
+  final String title;
+  final String? description;
+  final List<ProposedEvent> proposedEvents;
+  final List<ProposedTodo> proposedTodos;
+  final String status;
+
+  const ChatDraft({
+    required this.id,
+    required this.title,
+    this.description,
+    this.proposedEvents = const [],
+    this.proposedTodos = const [],
+    this.status = 'draft',
+  });
+
+  factory ChatDraft.fromJson(Map<String, dynamic> json) {
+    return ChatDraft(
+      id: json['id'] as int,
+      title: json['title'] as String? ?? '',
+      description: json['description'] as String?,
+      proposedEvents: _parseObjectList(
+          json['proposed_events'], ProposedEvent.fromJson),
+      proposedTodos: _parseObjectList(
+          json['proposed_todos'], ProposedTodo.fromJson),
+      status: json['status'] as String? ?? 'draft',
+    );
+  }
+}
+
+class Interest {
+  final int? id;
+  final String category;
+  final String tag;
+  final List<String> keywords;
+  final double weight;
+
+  const Interest({
+    this.id,
+    required this.category,
+    required this.tag,
+    this.keywords = const [],
+    this.weight = 1.0,
+  });
+
+  factory Interest.fromJson(Map<String, dynamic> json) {
+    return Interest(
+      id: json['id'] as int?,
+      category: json['category'] as String? ?? '',
+      tag: json['tag'] as String? ?? '',
+      keywords: _parseStringList(json['keywords'], const []),
+      weight: (json['weight'] as num?)?.toDouble() ?? 1.0,
+    );
+  }
+}
+
+class RecommendationItem {
+  final int id;
+  final int contentId;
+  final double score;
+  final bool read;
+  final bool saved;
+  final String source;
+  final String title;
+  final String? description;
+  final String? url;
+  final String? author;
+  final String? publishedDate;
+  final String? contentType;
+  final List<String> tags;
+
+  const RecommendationItem({
+    required this.id,
+    required this.contentId,
+    this.score = 0,
+    this.read = false,
+    this.saved = false,
+    this.source = '',
+    required this.title,
+    this.description,
+    this.url,
+    this.author,
+    this.publishedDate,
+    this.contentType,
+    this.tags = const [],
+  });
+
+  factory RecommendationItem.fromJson(Map<String, dynamic> json) {
+    return RecommendationItem(
+      id: json['id'] as int,
+      contentId: json['content_id'] as int? ?? json['id'] as int,
+      score: (json['recommendation_score'] as num?)?.toDouble() ?? 0,
+      read: (json['read'] as int?) == 1,
+      saved: (json['saved'] as int?) == 1,
+      source: json['source'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      description: json['description'] as String?,
+      url: json['url'] as String?,
+      author: json['author'] as String?,
+      publishedDate: json['published_date'] as String?,
+      contentType: json['content_type'] as String?,
+      tags: _parseStringList(json['tags'], const []),
+    );
+  }
+}
+
+class ArxivReport {
+  final int? id;
+  final String? reportDate;
+  final String? summary;
+  final String? htmlContent;
+  final int downloadCount;
+
+  const ArxivReport({
+    this.id,
+    this.reportDate,
+    this.summary,
+    this.htmlContent,
+    this.downloadCount = 0,
+  });
+
+  factory ArxivReport.fromJson(Map<String, dynamic> json) {
+    return ArxivReport(
+      id: json['id'] as int?,
+      reportDate: json['report_date'] as String?,
+      summary: json['summary'] as String?,
+      htmlContent: json['html_content'] as String?,
+      downloadCount: json['download_count'] as int? ?? 0,
+    );
+  }
+}
+
+class ArxivPreference {
+  final String pushTime;
+  final int paperCount;
+  final List<String> categories;
+  final bool isEnabled;
+
+  const ArxivPreference({
+    this.pushTime = '09:00',
+    this.paperCount = 5,
+    this.categories = const ['cs.AI', 'cs.LG'],
+    this.isEnabled = true,
+  });
+
+  factory ArxivPreference.fromJson(Map<String, dynamic> json) {
+    return ArxivPreference(
+      pushTime: json['push_time'] as String? ?? '09:00',
+      paperCount: json['paper_count'] as int? ?? 5,
+      categories: _parseStringList(
+          json['categories'], const ['cs.AI', 'cs.LG']),
+      isEnabled: _parseBool(json['is_enabled']),
+    );
+  }
 }
