@@ -43,6 +43,17 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^4.0.0
   flutter_launcher_icons: ^0.14.4
+  msix: ^3.16.8
+
+msix_config:
+  display_name: 枫枫子的备忘录
+  publisher_display_name: Feng Calendar
+  identity_name: com.feng.calendar
+  msix_version: 1.0.0.0
+  logo_path: assets/icon.png
+  capabilities: internetClient,privateNetworkClientServer
+  languages: zh-cn,en-us
+  install_certificate: false
 
 flutter_launcher_icons:
   image_path: "assets/icon.png"
