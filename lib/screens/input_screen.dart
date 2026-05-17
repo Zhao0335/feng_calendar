@@ -24,6 +24,9 @@ class _InputScreenState extends State<InputScreen> {
   String? _attachmentName;
   bool _isImage = false;
 
+  // ── Extract chat history (local, per-session) ─────────────────────────────
+  final _extractHistory = <_Msg>[];
+
   // ── Mode ──────────────────────────────────────────────────────────────────
   bool _planMode = false;
 
@@ -197,8 +200,25 @@ class _InputScreenState extends State<InputScreen> {
 
   Future<void> _extract() async {
     final provider = context.read<AppProvider>();
-    bool success = false;
 
+    // Build user bubble text
+    final String userText;
+    if (_attachment != null) {
+      if (_isImage) {
+        userText = '[图片] ${_attachmentName ?? ""}';
+      } else {
+        userText = '[文件] ${_attachmentName ?? ""}';
+      }
+    } else {
+      userText = _textController.text.trim();
+      if (userText.isEmpty) return;
+    }
+
+    // Add user bubble immediately
+    setState(() => _extractHistory.add(_Msg(isUser: true, text: userText)));
+    _textController.clear();
+
+    bool success = false;
     if (_attachment != null) {
       if (_isImage) {
         success = await provider.extractFromImage(_attachment!);
@@ -208,31 +228,18 @@ class _InputScreenState extends State<InputScreen> {
       }
       if (success) _clearAttachment();
     } else {
-      final text = _textController.text.trim();
-      if (text.isEmpty) return;
-      success = await provider.extractFromText(text);
-      if (success) _textController.clear();
+      success = await provider.extractFromText(userText);
     }
 
     if (!mounted) return;
-    final cs = Theme.of(context).colorScheme;
-    if (!success) {
-      _showSnack(provider.errorMessage ?? '提取失败，请检查服务器连接',
-          color: cs.error);
-    } else {
-      final ec = provider.events.length;
-      final tc = provider.todos.length;
-      final msg = (ec == 0 && tc == 0)
-          ? '未提取到任何内容'
-          : '提取完成：${[
-              if (ec > 0) '$ec 个日程',
-              if (tc > 0) '$tc 个待办',
-            ].join('、')}';
-      _showSnack(msg,
-          color: (ec == 0 && tc == 0)
-              ? cs.error
-              : const Color(0xFF22C55E));
-    }
+
+    final aiReply = success
+        ? (provider.lastExtractMessage?.isNotEmpty == true
+            ? provider.lastExtractMessage!
+            : '提取完成：${provider.events.length} 个日程、${provider.todos.length} 个待办')
+        : (provider.errorMessage ?? '提取失败，请检查服务器连接');
+
+    setState(() => _extractHistory.add(_Msg(isUser: false, text: aiReply)));
   }
 
   // ── Plan helpers ──────────────────────────────────────────────────────────
@@ -275,6 +282,17 @@ class _InputScreenState extends State<InputScreen> {
       if (!mounted) return;
       _showSnack('$e');
     }
+  }
+
+  void _showChatHistory(List<ChatMessage> messages) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => _ChatHistorySheet(messages: messages),
+    );
   }
 
   void _scrollToBottom() {
@@ -320,18 +338,23 @@ class _InputScreenState extends State<InputScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_planMode ? 'AI 规划' : '提取日程'),
-        actions: _planMode && provider.currentSessionId != null
-            ? [
-                IconButton(
-                  icon: const Icon(Icons.delete_outline_rounded),
-                  tooltip: '清空对话',
-                  onPressed: () {
-                    provider.clearChat();
-                    setState(() {});
-                  },
-                ),
-              ]
-            : null,
+        actions: [
+          if (_planMode && provider.chatHistory.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.history_rounded),
+              tooltip: '历史记录',
+              onPressed: () => _showChatHistory(provider.chatHistory),
+            ),
+          if (_planMode && provider.currentSessionId != null)
+            IconButton(
+              icon: const Icon(Icons.delete_outline_rounded),
+              tooltip: '清空对话',
+              onPressed: () {
+                provider.clearChat();
+                setState(() {});
+              },
+            ),
+        ],
       ),
       body: Column(
         children: [
@@ -346,137 +369,136 @@ class _InputScreenState extends State<InputScreen> {
     );
   }
 
-  // ── Extract content area ──────────────────────────────────────────────────
+  // ── Extract chat area ─────────────────────────────────────────────────────
 
   Widget _buildExtractArea(ColorScheme cs) {
-    if (_attachment != null) {
-      return _isImage ? _buildImagePreview(cs) : _buildFilePreview(cs);
+    final isLoading = context.watch<AppProvider>().status == ExtractionStatus.loading;
+
+    if (_extractHistory.isEmpty) {
+      // Empty state as AI welcome bubble at bottom
+      return ListView(
+        reverse: true,
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        children: [_aiBubble(cs, '你好！把想记录的日程发给我吧。\n支持文字描述、截图、PDF / TXT 文件。')],
+      );
     }
-    return _buildExtractHint(cs);
+
+    final items = <Widget>[
+      for (final msg in _extractHistory)
+        msg.isUser ? _userBubble(cs, msg.text) : _aiBubble(cs, msg.text),
+      if (isLoading) _typingBubble(cs),
+    ];
+
+    return ListView.builder(
+      controller: _scrollController,
+      reverse: true,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      itemCount: items.length,
+      itemBuilder: (_, i) => items[items.length - 1 - i],
+    );
   }
 
-  Widget _buildExtractHint(ColorScheme cs) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: cs.primaryContainer.withValues(alpha: 0.35),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.auto_awesome_rounded,
-                  size: 36, color: cs.primary),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              '输入文字或添加附件',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: cs.onSurface,
-                    fontWeight: FontWeight.w600,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '支持文字描述、截图、PDF / TXT 文件\n提取完成后自动保存到日程列表',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: cs.outline, height: 1.6),
-              textAlign: TextAlign.center,
-            ),
-          ],
+  // ── Shared bubble builders ────────────────────────────────────────────────
+
+  Widget _userBubble(ColorScheme cs, String text) {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        constraints:
+            BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.75),
+        decoration: BoxDecoration(
+          color: cs.primary,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(18),
+            topRight: Radius.circular(18),
+            bottomLeft: Radius.circular(18),
+            bottomRight: Radius.circular(4),
+          ),
+        ),
+        child: MarkdownBody(
+          data: text,
+          selectable: true,
+          styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+            p: TextStyle(color: cs.onPrimary, fontSize: 14.5, height: 1.45),
+            strong: TextStyle(color: cs.onPrimary, fontWeight: FontWeight.w700),
+            em: TextStyle(color: cs.onPrimary, fontStyle: FontStyle.italic),
+            code: TextStyle(color: cs.onPrimary.withValues(alpha: 0.85),
+                fontFamily: 'monospace', fontSize: 13),
+            listBullet: TextStyle(color: cs.onPrimary),
+            h1: TextStyle(color: cs.onPrimary, fontSize: 18, fontWeight: FontWeight.w700),
+            h2: TextStyle(color: cs.onPrimary, fontSize: 16, fontWeight: FontWeight.w700),
+            h3: TextStyle(color: cs.onPrimary, fontSize: 15, fontWeight: FontWeight.w600),
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildImagePreview(ColorScheme cs) {
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Image.file(_attachment!, fit: BoxFit.contain),
+  Widget _aiBubble(ColorScheme cs, String text) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          _SmallAvatar(),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Container(
+              margin: const EdgeInsets.symmetric(vertical: 4),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              constraints: BoxConstraints(
+                  maxWidth: MediaQuery.sizeOf(context).width * 0.72),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHigh,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(4),
+                  topRight: Radius.circular(18),
+                  bottomLeft: Radius.circular(18),
+                  bottomRight: Radius.circular(18),
+                ),
+              ),
+              child: Text(text,
+                  style: TextStyle(
+                      color: cs.onSurface, fontSize: 14.5, height: 1.45)),
             ),
           ),
-        ),
-        Positioned(
-          top: 20,
-          right: 20,
-          child: _ClearButton(onTap: _clearAttachment),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _buildFilePreview(ColorScheme cs) {
-    return Stack(
-      children: [
-        Center(
-          child: Container(
-            margin: const EdgeInsets.all(40),
-            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
+  Widget _typingBubble(ColorScheme cs) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          _SmallAvatar(),
+          const SizedBox(width: 8),
+          Container(
+            margin: const EdgeInsets.only(top: 4, bottom: 4),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
             decoration: BoxDecoration(
-              color: cs.primaryContainer.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                  color: cs.primary.withValues(alpha: 0.18), width: 1.5),
+              color: cs.surfaceContainerHigh,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(4),
+                topRight: Radius.circular(18),
+                bottomLeft: Radius.circular(18),
+                bottomRight: Radius.circular(18),
+              ),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  _attachmentType == 'pdf'
-                      ? Icons.picture_as_pdf_rounded
-                      : Icons.description_rounded,
-                  size: 60,
-                  color: cs.primary,
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  _attachmentName ?? '',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: cs.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    _attachmentType?.toUpperCase() ?? '',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: cs.primary,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              _Dot(delay: 0),
+              _Dot(delay: 200),
+              _Dot(delay: 400),
+            ]),
           ),
-        ),
-        Positioned(
-          top: 20,
-          right: 20,
-          child: _ClearButton(onTap: _clearAttachment),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -485,57 +507,28 @@ class _InputScreenState extends State<InputScreen> {
   Widget _buildChatArea(ColorScheme cs, AppProvider provider) {
     final messages = provider.chatHistory;
     final draft = provider.currentDraft;
+    final loading = provider.chatLoading;
 
-    if (messages.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(40),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: cs.secondaryContainer.withValues(alpha: 0.5),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(Icons.psychology_alt_rounded,
-                    size: 38, color: cs.secondary),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                '告诉 AI 你的规划需求',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: cs.onSurface,
-                      fontWeight: FontWeight.w600,
-                    ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '例如：我想在 2 周内学完 Python 基础',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: cs.outline),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
+    if (messages.isEmpty && !loading) {
+      return ListView(
+        reverse: true,
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        children: [_aiBubble(cs, '告诉我你的规划需求吧，例如：\n我想在 2 周内学完 Python 基础')],
       );
     }
 
+    final items = <Widget>[
+      for (final msg in messages) _buildMessageBubble(msg, cs),
+      if (loading) _typingBubble(cs),
+      if (draft != null) _buildDraftCard(draft, cs),
+    ];
+
     return ListView.builder(
       controller: _scrollController,
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      itemCount: messages.length + (draft != null ? 1 : 0),
-      itemBuilder: (context, index) {
-        if (index < messages.length) {
-          return _buildMessageBubble(messages[index], cs);
-        }
-        return _buildDraftCard(draft!, cs);
-      },
+      reverse: true,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      itemCount: items.length,
+      itemBuilder: (_, i) => items[items.length - 1 - i],
     );
   }
 
@@ -558,69 +551,76 @@ class _InputScreenState extends State<InputScreen> {
               bottomLeft: Radius.circular(16),
             ),
           ),
-          child: Text(
-            message.content,
-            style: TextStyle(color: cs.onPrimary, fontSize: 14, height: 1.5),
+          child: MarkdownBody(
+            data: message.content,
+            selectable: true,
+            styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+              p: TextStyle(color: cs.onPrimary, fontSize: 14.5, height: 1.45),
+              strong: TextStyle(color: cs.onPrimary, fontWeight: FontWeight.w700),
+              em: TextStyle(color: cs.onPrimary, fontStyle: FontStyle.italic),
+              code: TextStyle(color: cs.onPrimary.withValues(alpha: 0.85),
+                  fontFamily: 'monospace', fontSize: 13),
+              listBullet: TextStyle(color: cs.onPrimary),
+              h1: TextStyle(color: cs.onPrimary, fontSize: 18, fontWeight: FontWeight.w700),
+              h2: TextStyle(color: cs.onPrimary, fontSize: 16, fontWeight: FontWeight.w700),
+              h3: TextStyle(color: cs.onPrimary, fontSize: 15, fontWeight: FontWeight.w600),
+            ),
           ),
         ),
       );
     }
 
-    // AI bubble: render Markdown
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 5),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        constraints: BoxConstraints(maxWidth: maxWidth),
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerHigh,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(16),
-            topRight: Radius.circular(16),
-            bottomRight: Radius.circular(16),
+    // AI bubble: avatar + Markdown
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          _SmallAvatar(),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Container(
+              constraints: BoxConstraints(maxWidth: maxWidth),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHigh,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(4),
+                  topRight: Radius.circular(18),
+                  bottomLeft: Radius.circular(18),
+                  bottomRight: Radius.circular(18),
+                ),
+              ),
+              child: MarkdownBody(
+                data: message.content,
+                selectable: true,
+                styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+                  p: TextStyle(fontSize: 14, height: 1.6, color: cs.onSurface),
+                  strong: TextStyle(fontWeight: FontWeight.w700, color: cs.onSurface),
+                  em: TextStyle(fontStyle: FontStyle.italic, color: cs.onSurface),
+                  code: TextStyle(
+                    fontSize: 13,
+                    fontFamily: 'monospace',
+                    backgroundColor: cs.surfaceContainerHighest,
+                    color: cs.primary,
+                  ),
+                  codeblockDecoration: BoxDecoration(
+                    color: cs.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  blockquoteDecoration: BoxDecoration(
+                    border: Border(left: BorderSide(color: cs.primary, width: 3)),
+                    color: cs.primaryContainer.withValues(alpha: 0.2),
+                  ),
+                  listBullet: TextStyle(fontSize: 14, color: cs.onSurface),
+                  h1: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: cs.onSurface),
+                  h2: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: cs.onSurface),
+                  h3: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: cs.onSurface),
+                ),
+              ),
+            ),
           ),
-        ),
-        child: MarkdownBody(
-          data: message.content,
-          selectable: true,
-          styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-            p: TextStyle(fontSize: 14, height: 1.6, color: cs.onSurface),
-            strong: TextStyle(
-                fontWeight: FontWeight.w700, color: cs.onSurface),
-            em: TextStyle(
-                fontStyle: FontStyle.italic, color: cs.onSurface),
-            code: TextStyle(
-              fontSize: 13,
-              fontFamily: 'monospace',
-              backgroundColor: cs.surfaceContainerHighest,
-              color: cs.primary,
-            ),
-            codeblockDecoration: BoxDecoration(
-              color: cs.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            blockquoteDecoration: BoxDecoration(
-              border: Border(
-                  left: BorderSide(color: cs.primary, width: 3)),
-              color: cs.primaryContainer.withValues(alpha: 0.2),
-            ),
-            listBullet:
-                TextStyle(fontSize: 14, color: cs.onSurface),
-            h1: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: cs.onSurface),
-            h2: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: cs.onSurface),
-            h3: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: cs.onSurface),
-          ),
-        ),
+        ],
       ),
     );
   }
@@ -1007,6 +1007,187 @@ class _IconBtn extends StatelessWidget {
                 color: onTap == null ? cs.outline : color, size: 20),
           ),
         ),
+      ),
+    );
+  }
+}
+
+// Simple message model for extract chat history
+class _Msg {
+  final bool isUser;
+  final String text;
+  const _Msg({required this.isUser, required this.text});
+}
+
+class _ChatHistorySheet extends StatelessWidget {
+  final List<ChatMessage> messages;
+  const _ChatHistorySheet({required this.messages});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.65,
+      maxChildSize: 0.92,
+      builder: (_, ctrl) => Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Row(
+              children: [
+                Container(
+                  width: 36, height: 4,
+                  decoration: BoxDecoration(
+                      color: cs.outlineVariant,
+                      borderRadius: BorderRadius.circular(2)),
+                ),
+                const Spacer(),
+                Text('对话记录 (${messages.length}条)',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w600, color: cs.onSurface)),
+                const Spacer(),
+                const SizedBox(width: 36),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: ListView.separated(
+              controller: ctrl,
+              padding: const EdgeInsets.all(16),
+              itemCount: messages.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (_, i) {
+                final msg = messages[i];
+                final isUser = msg.role == ChatMessageRole.user;
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: isUser
+                      ? MainAxisAlignment.end
+                      : MainAxisAlignment.start,
+                  children: [
+                    if (!isUser) ...[
+                      Container(
+                        width: 24, height: 24,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                              colors: [cs.primary, cs.tertiary]),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.auto_awesome_rounded,
+                            size: 12, color: Colors.white),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isUser
+                              ? cs.primary
+                              : cs.surfaceContainerHigh,
+                          borderRadius: BorderRadius.only(
+                            topLeft: const Radius.circular(16),
+                            topRight: const Radius.circular(16),
+                            bottomLeft:
+                                Radius.circular(isUser ? 16 : 4),
+                            bottomRight:
+                                Radius.circular(isUser ? 4 : 16),
+                          ),
+                        ),
+                        child: MarkdownBody(
+                          data: msg.content,
+                          styleSheet:
+                              MarkdownStyleSheet.fromTheme(Theme.of(context))
+                                  .copyWith(
+                            p: TextStyle(
+                                fontSize: 13,
+                                height: 1.4,
+                                color: isUser
+                                    ? cs.onPrimary
+                                    : cs.onSurface),
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (isUser) const SizedBox(width: 32),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SmallAvatar extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      width: 28,
+      height: 28,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [cs.primary, cs.tertiary],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        shape: BoxShape.circle,
+      ),
+      child: const Icon(Icons.auto_awesome_rounded, size: 14, color: Colors.white),
+    );
+  }
+}
+
+class _Dot extends StatefulWidget {
+  final int delay;
+  const _Dot({required this.delay});
+  @override
+  State<_Dot> createState() => _DotState();
+}
+
+class _DotState extends State<_Dot> with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 900))
+      ..repeat();
+    _anim = Tween(begin: 0.0, end: 1.0).animate(CurvedAnimation(
+      parent: _ctrl,
+      curve: Interval(widget.delay / 900, (widget.delay + 400) / 900,
+          curve: Curves.easeInOut),
+    ));
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (_, __) => Container(
+        width: 7,
+        height: 7,
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        decoration: BoxDecoration(
+          color: cs.outline.withValues(alpha: 0.4 + _anim.value * 0.5),
+          shape: BoxShape.circle,
+        ),
+        transform: Matrix4.translationValues(0, -4 * _anim.value, 0),
       ),
     );
   }

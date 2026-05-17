@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../providers/app_provider.dart';
+import 'paper_reader_screen.dart';
 
 class RecommendationsScreen extends StatefulWidget {
   const RecommendationsScreen({super.key});
@@ -109,7 +110,8 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
           return RefreshIndicator(
             onRefresh: () => provider.loadRecommendations(unreadOnly: _unreadOnly),
             child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+              padding: EdgeInsets.fromLTRB(16, 8, 16,
+                  MediaQuery.of(context).padding.bottom + 24),
               itemCount: displayed.length,
               itemBuilder: (context, index) {
                 final item = displayed[index];
@@ -117,6 +119,9 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
                   item: item,
                   onOpen: () => _openItem(item),
                   onSave: () => _saveItem(item),
+                  onRead: (item.source == 'arxiv' || item.source == 'huggingface')
+                      ? () => _openItem(item)
+                      : null,
                 );
               },
             ),
@@ -126,10 +131,34 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
     );
   }
 
+  /// Extract arXiv ID from URL like https://arxiv.org/abs/2301.12345
+  String? _arxivId(String? url) {
+    if (url == null) return null;
+    final uri = Uri.tryParse(url);
+    if (uri == null) return null;
+    final segs = uri.pathSegments;
+    final idx = segs.contains('abs') ? segs.indexOf('abs') : segs.indexOf('pdf');
+    if (idx >= 0 && idx + 1 < segs.length) return segs.sublist(idx + 1).join('/');
+    return null;
+  }
+
   Future<void> _openItem(RecommendationItem item) async {
     if (!item.read) {
       context.read<AppProvider>().markRecommendationRead(item.contentId);
     }
+
+    // arXiv papers: open in-app reader
+    if (item.source == 'arxiv') {
+      final aid = _arxivId(item.url);
+      if (aid != null) {
+        Navigator.push(context, MaterialPageRoute(
+          builder: (_) => PaperReaderScreen(arxivId: aid, title: item.title),
+        ));
+        return;
+      }
+    }
+
+    // Other sources: open in browser
     final url = item.url;
     if (url == null || url.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -139,16 +168,6 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
       ));
       return;
     }
-
-    // Show immediate feedback
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: const Text('正在打开…'),
-      duration: const Duration(seconds: 1),
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      margin: const EdgeInsets.all(12),
-    ));
-
     final uri = Uri.tryParse(url);
     if (uri == null) return;
     try {
@@ -213,11 +232,13 @@ class _RecommendationCard extends StatelessWidget {
   final RecommendationItem item;
   final VoidCallback onOpen;
   final VoidCallback onSave;
+  final VoidCallback? onRead; // non-null for arXiv items
 
   const _RecommendationCard({
     required this.item,
     required this.onOpen,
     required this.onSave,
+    this.onRead,
   });
 
   @override
@@ -225,10 +246,12 @@ class _RecommendationCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
 
     final (sourceIcon, sourceColor) = switch (item.source) {
-      'arxiv'      => (Icons.article_rounded,     const Color(0xFFB91C1C)),
-      'github'     => (Icons.code_rounded,         const Color(0xFF1D4ED8)),
-      'huggingface'=> (Icons.smart_toy_rounded,    const Color(0xFFFF6B00)),
-      _            => (Icons.link_rounded,          cs.primary),
+      'arxiv'         => (Icons.article_rounded,          const Color(0xFFB91C1C)),
+      'github'        => (Icons.code_rounded,              const Color(0xFF1D4ED8)),
+      'huggingface'   => (Icons.smart_toy_rounded,         const Color(0xFFFF6B00)),
+      'csdn'          => (Icons.web_rounded,               const Color(0xFFFC5531)),
+      'stackoverflow' => (Icons.question_answer_rounded,   const Color(0xFFF48024)),
+      _               => (Icons.link_rounded,              cs.primary),
     };
 
     return Container(
@@ -327,6 +350,26 @@ class _RecommendationCard extends StatelessWidget {
                         style: TextStyle(fontSize: 11, color: cs.outline)),
                   ],
                   const Spacer(),
+                  if (onRead != null) ...[
+                    FilledButton.tonal(
+                      onPressed: onRead,
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(0, 28),
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.menu_book_rounded, size: 13),
+                          SizedBox(width: 4),
+                          Text('阅读论文'),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                  ],
                   if (!item.saved)
                     IconButton(
                       onPressed: onSave,

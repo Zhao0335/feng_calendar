@@ -109,7 +109,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('设置')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        padding: EdgeInsets.fromLTRB(16, 8, 16,
+            MediaQuery.of(context).padding.bottom + 24),
         children: [
           // ── 账户 ───────────────────────────────────────────────────────────
           const _GroupLabel('账户'),

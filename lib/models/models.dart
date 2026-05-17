@@ -245,10 +245,12 @@ const Object _sentinel = Object();
 class ExtractionResult {
   final List<ScheduleEvent> events;
   final List<Todo> todos;
+  final String message;
 
   const ExtractionResult({
     required this.events,
     required this.todos,
+    this.message = '',
   });
 
   factory ExtractionResult.fromJson(Map<String, dynamic> json) {
@@ -259,6 +261,7 @@ class ExtractionResult {
       todos: (json['todos'] as List<dynamic>? ?? [])
           .map((e) => Todo.fromJson(e as Map<String, dynamic>))
           .toList(),
+      message: json['message'] as String? ?? '',
     );
   }
 

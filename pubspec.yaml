@@ -36,6 +36,7 @@ dependencies:
   # Widget 桥接（iOS/macOS 小组件）
   home_widget: ^0.5.0
 
+  pdfx: ^2.9.0
   cupertino_icons: ^1.0.8
 
 dev_dependencies:

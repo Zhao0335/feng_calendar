@@ -73,7 +73,7 @@ class _FloatingChatButtonState extends State<FloatingChatButton>
   void _initPosition(Size s) {
     if (_initialized) return;
     _x = s.width - 76;
-    _y = s.height - 160;
+    _y = s.height - 260;
     _initialized = true;
   }
 

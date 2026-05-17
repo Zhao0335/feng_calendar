@@ -476,6 +476,22 @@ class ApiService {
       return list
           .map((e) => ArxivReport.fromJson(e as Map<String, dynamic>))
           .toList();
+    }); 
+  }
+
+  /// Download arXiv paper PDF, convert to Markdown on server, return text.
+  /// First call takes 10–30 s; subsequent calls return cached result instantly.
+  Future<String> fetchPaperMarkdown(String arxivId) {
+    return _safe(() async {
+      final base = await _getBaseUrl();
+      final res = await _dio.get(
+        '$base/arxiv/paper/${Uri.encodeComponent(arxivId)}/markdown',
+        options: Options(
+          headers: {'Authorization': 'Bearer ${auth.sessionId}'},
+          receiveTimeout: const Duration(minutes: 2),
+        ),
+      );
+      return _asMap(res.data)['markdown'] as String? ?? '';
     });
   }
 
