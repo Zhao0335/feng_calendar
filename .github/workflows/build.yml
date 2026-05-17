@@ -58,17 +58,14 @@ jobs:
       - run: flutter pub get
       - run: flutter build windows --release
 
-      - name: Zip release folder
-        shell: pwsh
-        run: |
-          Compress-Archive `
-            -Path "build/windows/x64/runner/Release/*" `
-            -DestinationPath "build/${{ env.APP_NAME }}-windows.zip"
+      - name: Create Windows installer (Inno Setup)
+        shell: cmd
+        run: iscc "windows\installer.iss"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-zip
-          path: build/${{ env.APP_NAME }}-windows.zip
+          name: windows-installer
+          path: build/枫枫子的备忘录-Setup.exe
 
   # ── macOS DMG ────────────────────────────────────────────────────────────────
   build-macos:
@@ -127,6 +124,6 @@ jobs:
         with:
           files: |
             artifacts/android-apk/*.apk
-            artifacts/windows-zip/*.zip
+            artifacts/windows-installer/*.exe
             artifacts/macos-dmg/*.dmg
           generate_release_notes: true

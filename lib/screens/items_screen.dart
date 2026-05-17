@@ -146,7 +146,8 @@ class _ItemsScreenState extends State<ItemsScreen> {
             ),
             if (hasContent) ...[
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                padding: EdgeInsets.fromLTRB(16, 8, 16,
+                    MediaQuery.of(context).padding.bottom + 16),
                 sliver: SliverList.list(
                   children: [
                     if (events.isNotEmpty) ...[
@@ -226,7 +227,7 @@ class _ItemsScreenState extends State<ItemsScreen> {
                             ),
                           )),
                     ],
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 8),
                   ],
                 ),
               ),

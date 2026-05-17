@@ -16,6 +16,7 @@ class AppProvider extends ChangeNotifier {
   List<Todo> todos = [];
   ExtractionStatus status = ExtractionStatus.idle;
   String? errorMessage;
+  String? lastExtractMessage; // natural-language reply from backend after extraction
   String? pendingFilePath;
 
   AppProvider({required this.api, required this.storage});
@@ -58,7 +59,8 @@ class AppProvider extends ChangeNotifier {
     errorMessage = null;
     notifyListeners();
     try {
-      await fn();
+      final result = await fn();
+      lastExtractMessage = result.message.isNotEmpty ? result.message : null;
       // Server already saved the new items; sync full list to stay consistent
       await _syncFromServer();
       status = ExtractionStatus.success;
